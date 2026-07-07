@@ -1,0 +1,281 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String   @id @default(uuid())
+  name               String
+  email              String   @unique
+  passwordHash       String
+  roleId             String
+  branchId           String?
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  status             String   @default("ACTIVE")
+  phone              String?
+  address            String?
+  lastLogin          DateTime?
+  branchName         String   @default("Head Office")
+  customerType       String   @default("STANDARD")
+  branch             Branch?  @relation(fields: [branchId], references: [id])
+  role               Role     @relation(fields: [roleId], references: [id])
+  reservations       StockReservation[] @relation("CustomerReservations")
+  createdReservations StockReservation[] @relation("EmployeeReservations")
+  assignedEmployeeId String?
+  assignedEmployee   User?    @relation("EmployeeCustomers", fields: [assignedEmployeeId], references: [id])
+  customers          User[]   @relation("EmployeeCustomers")
+  notifications      Notification[]
+  pagePermissions          String?
+  inheritBranchPermissions Boolean  @default(true)
+  purchaseOrders           PurchaseOrder[]
+
+  @@index([roleId])
+  @@index([branchId])
+  @@index([status])
+  @@index([assignedEmployeeId])
+}
+
+model Role {
+  id    String @id @default(uuid())
+  name  String @unique
+  users User[]
+}
+
+model Branch {
+  id          String      @id @default(uuid())
+  name        String      @unique
+  inventories Inventory[]
+  users       User[]
+  pagePermissions          String?
+}
+
+model Category {
+  id       String    @id @default(uuid())
+  name     String    @unique
+  products Product[]
+}
+
+model Product {
+  id             String      @id @default(uuid())
+  sku            String      @unique
+  name           String
+  categoryId     String
+  brand          String
+  serialTracking Boolean     @default(false)
+  barcode        String?
+  reorderLevel   Int         @default(10)
+  safetyStock    Int         @default(5)
+  status         String      @default("ACTIVE")
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  inventories    Inventory[]
+  category       Category    @relation(fields: [categoryId], references: [id])
+  reservations   StockReservation[]
+
+  @@index([brand])
+  @@index([categoryId])
+  @@index([status])
+}
+
+model Inventory {
+  id             String   @id @default(uuid())
+  productId      String
+  branchId       String
+  availableStock Int      @default(0)
+  reservedStock  Int      @default(0)
+  allocatedStock Int      @default(0)
+  damagedStock   Int      @default(0)
+  reorderLevel   Int      @default(8)
+  updatedAt      DateTime @updatedAt
+  itemName       String   @default("")
+  sku            String   @default("")
+  branchCode     String   @default("")
+  quantity       Int      @default(0)
+  availableQty   Int      @default(0)
+  reservedQty    Int      @default(0)
+  allocatedQty   Int      @default(0)
+  damagedQty     Int      @default(0)
+  returnedQty    Int      @default(0)
+  transitQty     Int      @default(0)
+  incomingQty    Int      @default(0)
+  outgoingQty    Int      @default(0)
+  deadQty        Int      @default(0)
+  minStock       Int      @default(5)
+  maxStock       Int      @default(200)
+  warehouseZone  String   @default("A1")
+  ageingDays     Int      @default(0)
+  createdAt      DateTime @default(now())
+  branch         Branch   @relation(fields: [branchId], references: [id])
+  product        Product  @relation(fields: [productId], references: [id])
+
+  @@index([productId])
+  @@index([branchId])
+  @@index([sku])
+  @@index([branchCode])
+}
+
+model InventoryMovement {
+  id         String   @id @default(uuid())
+  sku        String
+  branchCode String
+  type       String
+  quantity   Int
+  details    String
+  timestamp  DateTime @default(now())
+  userId     String?
+
+  @@index([sku])
+  @@index([branchCode])
+  @@index([timestamp])
+}
+
+model StockAlert {
+  id         String   @id @default(uuid())
+  type       String
+  message    String
+  branchCode String
+  resolved   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([branchCode])
+  @@index([resolved])
+  @@index([createdAt])
+}
+
+model ProductPrice {
+  id           String   @id @default(uuid())
+  sku          String
+  branchCode   String
+  costPrice    Float
+  sellingPrice Float
+  mrp          Float    @default(0.0)
+  margin       Float
+  lastUpdated  DateTime @default(now())
+
+  @@unique([sku, branchCode])
+  @@index([sku])
+  @@index([branchCode])
+}
+
+model ProductPriceHistory {
+  id           String   @id @default(uuid())
+  sku          String
+  branchCode   String
+  costPrice    Float
+  sellingPrice Float
+  mrp          Float    @default(0.0)
+  updatedBy    String
+  updatedAt    DateTime @default(now())
+
+  @@index([sku])
+  @@index([branchCode])
+  @@index([updatedAt])
+}
+
+model ChatSession {
+  id        String        @id @default(uuid())
+  userId    String
+  title     String
+  createdAt DateTime      @default(now())
+  messages  ChatMessage[]
+
+  @@index([userId])
+}
+
+model ChatMessage {
+  id            String      @id @default(uuid())
+  chatSessionId String
+  sender        String
+  message       String
+  timestamp     DateTime    @default(now())
+  chatSession   ChatSession @relation(fields: [chatSessionId], references: [id], onDelete: Cascade)
+
+  @@index([chatSessionId])
+}
+
+model AIQueryLog {
+  id             String   @id @default(uuid())
+  userId         String
+  question       String
+  generatedQuery String?
+  executionTime  Float?
+  timestamp      DateTime @default(now())
+
+  @@index([userId])
+}
+
+model AIAuditLog {
+  id               String   @id @default(uuid())
+  userId           String
+  permissionPassed Boolean
+  actionChecked    String
+  timestamp        DateTime @default(now())
+
+  @@index([userId])
+}
+
+model StockReservation {
+  id                String   @id @default(uuid())
+  reservationNumber String   @unique
+  customerId        String
+  employeeId        String?
+  productId         String
+  sku               String
+  branchCode        String   @default("HYD-HQ")
+  quantity          Int
+  status            String   @default("PENDING") // PENDING, ACCEPTED, REJECTED, CANCELLED, EXPIRED
+  notes             String?
+  reservedAt        DateTime @default(now())
+  expiresAt         DateTime
+  acceptedAt        DateTime?
+  rejectedAt        DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation("CustomerReservations", fields: [customerId], references: [id])
+  employee          User?    @relation("EmployeeReservations", fields: [employeeId], references: [id])
+  product           Product  @relation(fields: [productId], references: [id])
+
+  @@index([customerId])
+  @@index([employeeId])
+  @@index([productId])
+  @@index([status])
+  @@index([expiresAt])
+  @@index([createdAt])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([read])
+  @@index([createdAt])
+}
+
+model PurchaseOrder {
+  id                 String   @id @default(uuid())
+  poNumber           String   @unique
+  customerId         String
+  customerName       String
+  dateReceived       DateTime @default(now())
+  totalItems         Int
+  stockStatus        String   @default("Checking") // Checking, Available, Shortage
+  verificationStatus String   @default("Pending")  // Pending, PO Verified & Stock Available
+  branchCode         String   @default("HYD-HQ")
+  itemsJson          String   @default("[]")      // Array of { sku: string, quantity: number }
+  user               User     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@index([branchCode])
+}
