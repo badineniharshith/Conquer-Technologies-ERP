@@ -52,6 +52,23 @@ export default function SettingsClient({ users, roles, branches = [], auditLogs 
   const { activeRole, activeUser, theme, toggleTheme, logoutSession } = useErpStore();
   const router = useRouter();
 
+  const formatLastLogin = (dateStringOrDate: any) => {
+    if (!dateStringOrDate) return "First Login";
+    const date = new Date(dateStringOrDate);
+    const day = String(date.getDate()).padStart(2, '0');
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const month = monthNames[date.getMonth()];
+    const year = date.getFullYear();
+    let hours = date.getHours();
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    return `${day} ${month} ${year}, ${hours}:${minutes} ${ampm}`;
+  };
+
+  const currentUserData = users.find(u => u.id === activeUser?.id);
+
   const [activeTab, setActiveTab] = useState("general");
   const [loadingId, setLoadingId] = useState<string | null>(null);
 
@@ -77,12 +94,7 @@ export default function SettingsClient({ users, roles, branches = [], auditLogs 
   const [density, setDensity] = useState("Comfort");
   const [accentColor, setAccentColor] = useState("Orange");
 
-  // AI Settings States
-  const [aiEnabled, setAiEnabled] = useState(true);
-  const [aiModel, setAiModel] = useState("Gemini 2.0 Flash");
-  const [responseLength, setResponseLength] = useState("Medium");
-  const [enableCharts, setEnableCharts] = useState(true);
-  const [enableSuggestions, setEnableSuggestions] = useState(true);
+
 
   // Security States
   const [currentPassword, setCurrentPassword] = useState("");
@@ -159,10 +171,10 @@ export default function SettingsClient({ users, roles, branches = [], auditLogs 
   
   // Permission Matrix State
   const [permissions, setPermissions] = useState<Record<string, Record<string, boolean>>>({
-    SUPER_ADMIN: { "view_catalog": true, "edit_products": true, "manage_stock": true, "manage_prices": true, "manage_users": true, "ai_query": true },
-    ADMIN: { "view_catalog": true, "edit_products": true, "manage_stock": true, "manage_prices": true, "manage_users": false, "ai_query": true },
-    EMPLOYEE: { "view_catalog": true, "edit_products": true, "manage_stock": true, "manage_prices": false, "manage_users": false, "ai_query": false },
-    CUSTOMER: { "view_catalog": true, "edit_products": false, "manage_stock": false, "manage_prices": false, "manage_users": false, "ai_query": false }
+    SUPER_ADMIN: { "view_catalog": true, "edit_products": true, "manage_stock": true, "manage_prices": true, "manage_users": true },
+    ADMIN: { "view_catalog": true, "edit_products": true, "manage_stock": true, "manage_prices": true, "manage_users": false },
+    EMPLOYEE: { "view_catalog": true, "edit_products": true, "manage_stock": true, "manage_prices": false, "manage_users": false },
+    CUSTOMER: { "view_catalog": true, "edit_products": false, "manage_stock": false, "manage_prices": false, "manage_users": false }
   });
 
   // User Management filters and pagination
@@ -212,7 +224,6 @@ export default function SettingsClient({ users, roles, branches = [], auditLogs 
     { path: "/analytics", label: "Procurement Analytics" },
     { path: "/admin", label: "Admin Operations" },
     { path: "/settings", label: "System Settings" },
-    { path: "/ai-agent", label: "AI Copilot Agent" },
     { path: "/reserved-stock", label: "Reserved Stock Locks" }
   ], []);
 
@@ -509,8 +520,10 @@ export default function SettingsClient({ users, roles, branches = [], auditLogs 
     { id: "security", label: "Security", icon: Lock },
     { id: "notifications", label: "Notifications", icon: Bell },
     { id: "appearance", label: "Appearance", icon: Sliders },
-    { id: "ai_settings", label: "AI Settings", icon: Sparkles },
-    { id: "system", label: "System", icon: Server },
+
+    ...(activeRole === "SUPER_ADMIN" || activeRole === "ADMIN" ? [
+      { id: "system", label: "System", icon: Server }
+    ] : []),
     ...(activeRole === "SUPER_ADMIN" ? [
       { id: "dev_console", label: "Developer Console", icon: Monitor }
     ] : [])
@@ -677,6 +690,18 @@ export default function SettingsClient({ users, roles, branches = [], auditLogs 
                     Save Profile Changes
                   </button>
                 </form>
+                {currentUserData && (
+                  <div className="p-3 bg-stone-50 border border-stone-200 rounded-xl space-y-2 mt-4 max-w-lg">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-semibold text-stone-500">Account Registration:</span>
+                      <span className="font-bold text-stone-850">{new Date(currentUserData.createdAt).toLocaleDateString()}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-semibold text-stone-500">Last Login Date & Time:</span>
+                      <span className="font-bold text-orange-600">{formatLastLogin(currentUserData.lastLoginAt)}</span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -975,85 +1000,7 @@ export default function SettingsClient({ users, roles, branches = [], auditLogs 
             </div>
           )}
 
-          {/* AI SETTINGS SECTION */}
-          {activeTab === "ai_settings" && (
-            <div className="glass-panel p-5 bg-white border border-stone-200 rounded-2xl shadow-sm space-y-4 animate-in fade-in-50 duration-200">
-              <h3 className="font-bold text-sm text-stone-900 flex items-center space-x-2 border-b pb-2">
-                <Sparkles className="w-4 h-4 text-orange-505 animate-pulse" />
-                <span>AI Copilot Engine Configuration</span>
-              </h3>
-              <div className="space-y-4 text-xs max-w-lg">
-                <label className="flex items-center space-x-2.5 text-stone-750 cursor-pointer font-bold border-b pb-3">
-                  <input
-                    type="checkbox"
-                    checked={aiEnabled}
-                    onChange={(e) => setAiEnabled(e.target.checked)}
-                    className="rounded border-stone-300 text-orange-500 focus:ring-0 w-4 h-4 bg-stone-50 cursor-pointer"
-                  />
-                  <span>Enable ERP AI Procurement Copilot</span>
-                </label>
-
-                {aiEnabled && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-wider mb-1.5">AI Engine Model</label>
-                      <select
-                        value={aiModel}
-                        onChange={(e) => setAiModel(e.target.value)}
-                        className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg outline-none text-stone-850 focus:border-orange-500 focus:bg-white cursor-pointer font-medium"
-                      >
-                        <option value="Gemini 1.5 Flash">Gemini 1.5 Flash (Fast & Low Resource)</option>
-                        <option value="Gemini 2.0 Flash">Gemini 2.0 Flash (Recommended, default)</option>
-                        <option value="Gemini 1.5 Pro">Gemini 1.5 Pro (Analytical Research)</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-wider mb-1.5">Response Verbosity</label>
-                      <select
-                        value={responseLength}
-                        onChange={(e) => setResponseLength(e.target.value)}
-                        className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg outline-none text-stone-850 focus:border-orange-500 focus:bg-white cursor-pointer font-medium"
-                      >
-                        <option value="Short">Short & Direct Summaries</option>
-                        <option value="Medium">Medium (Table breakdowns & chart inserts)</option>
-                        <option value="Detailed">Detailed analytical breakdowns</option>
-                      </select>
-                    </div>
-                    <div className="sm:col-span-2 space-y-2 pt-2 border-t">
-                      <label className="flex items-center space-x-2.5 text-stone-750 cursor-pointer font-semibold">
-                        <input
-                          type="checkbox"
-                          checked={enableCharts}
-                          onChange={(e) => setEnableCharts(e.target.checked)}
-                          className="rounded border-stone-300 text-orange-500 focus:ring-0 w-3.5 h-3.5 bg-stone-50 cursor-pointer"
-                        />
-                        <span>Enable dynamic charts generation in answers</span>
-                      </label>
-                      <label className="flex items-center space-x-2.5 text-stone-750 cursor-pointer font-semibold">
-                        <input
-                          type="checkbox"
-                          checked={enableSuggestions}
-                          onChange={(e) => setEnableSuggestions(e.target.checked)}
-                          className="rounded border-stone-300 text-orange-500 focus:ring-0 w-3.5 h-3.5 bg-stone-50 cursor-pointer"
-                        />
-                        <span>Enable suggested follow-up queries suggestions</span>
-                      </label>
-                    </div>
-                  </div>
-                )}
-
-                <button
-                  onClick={() => toast.success("AI preferences updated successfully.")}
-                  className="px-4 py-2 bg-orange-500 hover:bg-orange-655 text-white rounded-lg text-xs font-bold transition-all shadow-md cursor-pointer"
-                >
-                  Save AI Settings
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* SYSTEM TAB */}
-          {activeTab === "system" && (
+          {activeTab === "system" && (activeRole === "SUPER_ADMIN" || activeRole === "ADMIN") && (
             <div className="space-y-6 animate-in fade-in-50 duration-200">
               {/* System Diagnostics */}
               <div className="glass-panel p-5 bg-white border border-stone-200 rounded-2xl shadow-sm space-y-4">
@@ -1188,14 +1135,14 @@ export default function SettingsClient({ users, roles, branches = [], auditLogs 
                               <th className="p-2 text-center">Stock</th>
                               <th className="p-2 text-center">Prices</th>
                               <th className="p-2 text-center">Users</th>
-                              <th className="p-2 text-center">AI</th>
+
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-stone-150">
                             {Object.keys(permissions).map((roleKey) => (
                               <tr key={roleKey} className="hover:bg-stone-50/50">
                                 <td className="p-2 font-bold font-mono text-stone-700">{roleKey}</td>
-                                {["manage_stock", "manage_prices", "manage_users", "ai_query"].map((permKey) => (
+                                {["manage_stock", "manage_prices", "manage_users"].map((permKey) => (
                                   <td key={permKey} className="p-2 text-center">
                                     <input
                                       type="checkbox"
@@ -1377,8 +1324,8 @@ export default function SettingsClient({ users, roles, branches = [], auditLogs 
                             </td>
                             <td className="px-4 py-3 font-mono font-bold text-orange-655 uppercase text-[10px]">{u.roleId}</td>
                             <td className="px-4 py-3 text-stone-600 font-semibold">{uBranch}</td>
-                            <td className="px-4 py-3 text-stone-500 font-medium">
-                              {u.lastLogin ? new Date(u.lastLogin).toLocaleString() : "Never"}
+                            <td className="px-4 py-3 text-stone-500 font-medium whitespace-nowrap">
+                              {formatLastLogin(u.lastLoginAt)}
                             </td>
                             <td className="px-4 py-3 text-center">
                               <span

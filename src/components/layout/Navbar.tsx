@@ -2,6 +2,7 @@
 
 import { useErpStore } from "@/lib/store";
 import { logoutUserAction } from "@/app/actions";
+import logoImg from "../../../public/logo.png";
 import {
   Search,
   Bell,
@@ -118,7 +119,7 @@ export default function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
 
       {/* Mobile Brand Logo */}
       <div className="lg:hidden flex items-center mr-2">
-        <img src="/logo.png" alt="Conquer Logo" className="h-6 object-contain" />
+        <img src={logoImg.src} alt="Conquer Logo" className="h-12 w-auto object-contain drop-shadow-sm" />
       </div>
 
       {/* Search Bar / Trigger Command Palette */}

@@ -127,7 +127,7 @@ export default function RegisterPage() {
 
       <div className="w-full max-w-xl bg-[#0d121f]/95 border border-slate-800 backdrop-blur-md p-6 rounded-2xl shadow-2xl space-y-6">
         <div className="flex items-center space-x-2.5">
-          <img src="/logo.png" alt="Conquer Logo" className="h-8 object-contain" />
+          <img src="/logo.png" alt="Conquer Logo" className="h-16 object-contain" />
           <span className="font-extrabold text-lg tracking-wider text-white">CONQUER ERP</span>
         </div>
 

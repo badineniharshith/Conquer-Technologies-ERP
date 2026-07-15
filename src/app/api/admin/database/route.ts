@@ -39,11 +39,7 @@ const SNAKE_TO_CAMEL: Record<string, string> = {
   product_price_history: "productPriceHistory",
   stock_alerts: "stockAlerts",
   transfer_requests: "transferRequests",
-  transfer_items: "transferItems",
-  chat_sessions: "chatSessions",
-  chat_messages: "chatMessages",
-  ai_query_logs: "aiQueryLogs",
-  ai_audit_logs: "aiAuditLogs"
+  transfer_items: "transferItems"
 };
 
 const CAMEL_TO_PRISMA_MODEL: Record<string, string> = {
@@ -59,11 +55,7 @@ const CAMEL_TO_PRISMA_MODEL: Record<string, string> = {
   productPriceHistory: "productPriceHistory",
   stockAlerts: "stockAlert",
   transferRequests: "transferRequest",
-  transferItems: "transferItem",
-  chatSessions: "chatSession",
-  chatMessages: "chatMessage",
-  aiQueryLogs: "aIQueryLog",
-  aiAuditLogs: "aIAuditLog"
+  transferItem: "transferItem"
 };
 
 export async function GET(req: NextRequest) {

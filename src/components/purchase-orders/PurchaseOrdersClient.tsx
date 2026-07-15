@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import SearchableDropdown from "@/components/ui/SearchableDropdown";
 import { motion, AnimatePresence, AnimatedModal, StaggerContainer, StaggerItem } from "@/components/ui/motion";
+import UnifiedPOAutoChecker from "./UnifiedPOAutoChecker";
 
 interface PurchaseOrdersClientProps {
   initialPurchaseOrders: any[];
@@ -52,6 +53,9 @@ export default function PurchaseOrdersClient({
 
   // New PO Modal state
   const [modalOpen, setModalOpen] = useState(false);
+  
+  // Real-time PO Audit Modal state
+  const [selectedAuditPoId, setSelectedAuditPoId] = useState<string | null>(null);
   const [newPoNumber, setNewPoNumber] = useState("");
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [selectedBranchCode, setSelectedBranchCode] = useState("HYD-HQ");
@@ -291,40 +295,47 @@ export default function PurchaseOrdersClient({
               filteredPurchaseOrders.map((po, idx) => {
                 const isLoading = actionLoadingId === po.id;
                 
-                return (
-                  <tr key={po.id} className="table-row-hover animate-fade-in-up" style={{ animationDelay: `${idx * 0.04}s`, animationFillMode: 'both' }}>
-                    <td className="px-6 py-4 font-mono font-black text-orange-655 text-sm">{po.poNumber}</td>
-                    <td className="px-6 py-4">
-                      <div className="font-bold text-stone-900">{po.customerName}</div>
-                      <div className="text-[10px] text-stone-400 mt-0.5">ID: {po.customerId}</div>
-                    </td>
-                    <td className="px-6 py-4 text-stone-500 font-medium">
-                      <div className="flex items-center space-x-1.5">
-                        <Calendar className="w-3.5 h-3.5 text-stone-400" />
-                        <span>{new Date(po.dateReceived).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-center font-extrabold text-stone-800">{po.totalItems} unit(s)</td>
-                    <td className="px-6 py-4 text-center">
-                      <span className={`inline-block text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full border ${getStockBadge(po.stockStatus)}`}>
-                        {po.stockStatus}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className={`inline-block text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full border ${getVerifyBadge(po.verificationStatus)}`}>
-                        {po.verificationStatus === "PO Verified & Stock Available" ? "Verified & Allocated" : po.verificationStatus}
-                      </span>
-                    </td>
-                    {isStaff && (
+                  return (
+                    <tr key={po.id} className="table-row-hover animate-fade-in-up" style={{ animationDelay: `${idx * 0.04}s`, animationFillMode: 'both' }}>
+                      <td className="px-6 py-4 font-mono font-black text-orange-655 text-sm">
+                        <button
+                          onClick={() => setSelectedAuditPoId(po.id)}
+                          className="hover:underline hover:text-orange-700 cursor-pointer font-black text-left text-orange-655 transition-colors focus:outline-none"
+                        >
+                          {po.poNumber}
+                        </button>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="font-bold text-stone-900">{po.customerName}</div>
+                        <div className="text-[10px] text-stone-400 mt-0.5">ID: {po.customerId}</div>
+                      </td>
+                      <td className="px-6 py-4 text-stone-500 font-medium">
+                        <div className="flex items-center space-x-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-stone-400" />
+                          <span>{new Date(po.dateReceived).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-center font-extrabold text-stone-800">{po.totalItems} unit(s)</td>
                       <td className="px-6 py-4 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <button
-                            onClick={() => handleCheckStock(po.id)}
-                            disabled={isLoading || po.verificationStatus === "PO Verified & Stock Available"}
-                            className="px-2.5 py-1.5 border border-stone-200 rounded bg-stone-50 hover:bg-stone-100 disabled:opacity-40 font-bold transition-all cursor-pointer text-[10px]"
-                          >
-                            {isLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Check Stock"}
-                          </button>
+                        <span className={`inline-block text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full border ${getStockBadge(po.stockStatus)}`}>
+                          {po.stockStatus}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className={`inline-block text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full border ${getVerifyBadge(po.verificationStatus)}`}>
+                          {po.verificationStatus === "PO Verified & Stock Available" ? "Verified & Allocated" : po.verificationStatus}
+                        </span>
+                      </td>
+                      {isStaff && (
+                        <td className="px-6 py-4 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => setSelectedAuditPoId(po.id)}
+                              disabled={isLoading || po.verificationStatus === "PO Verified & Stock Available"}
+                              className="px-2.5 py-1.5 border border-stone-200 rounded bg-stone-50 hover:bg-stone-100 disabled:opacity-40 font-bold transition-all cursor-pointer text-[10px]"
+                            >
+                              Check Stock
+                            </button>
                           
                           <button
                             onClick={() => handleVerifyPO(po.id)}
@@ -480,6 +491,21 @@ export default function PurchaseOrdersClient({
               </div>
             </form>
           </div>
+      </AnimatedModal>
+
+      {/* Real-time PO Audit Modal */}
+      <AnimatedModal open={!!selectedAuditPoId} onClose={() => setSelectedAuditPoId(null)}>
+        <div className="bg-white/95 backdrop-blur-xl border border-orange-200/70 p-6 rounded-2xl shadow-xl w-full max-w-lg relative animate-scale-in">
+          {selectedAuditPoId && (
+            <UnifiedPOAutoChecker 
+              purchaseOrderId={selectedAuditPoId} 
+              onClose={() => {
+                setSelectedAuditPoId(null);
+                router.refresh();
+              }} 
+            />
+          )}
+        </div>
       </AnimatedModal>
     </div>
   );

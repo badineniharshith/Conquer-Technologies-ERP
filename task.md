@@ -23,3 +23,7 @@
 - `[x]` Step 7: Update `ReservedStockClient.tsx` for Customer Portal and Employee reservation workflow
 - `[x]` Step 8: Configure navigation, security permissions, and notifications dropdown in Navbar
 - `[x]` Step 9: Verify changes, run database push, re-seed, and compile the walkthrough
+- `[x]` Step 10: Relocate project files, fix ENOENT paths, add "Add Customer" button and centered Portal modals
+- `[x]` Step 11: Remove delete option in customer table and remove register buttons/links in login and AI login pages
+- `[x]` Step 12: Implement transactional Last Login tracking with custom formatting and privacy restrictions
+

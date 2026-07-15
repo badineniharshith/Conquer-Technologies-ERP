@@ -8,32 +8,34 @@ datasource db {
 }
 
 model User {
-  id                 String   @id @default(uuid())
-  name               String
-  email              String   @unique
-  passwordHash       String
-  roleId             String
-  branchId           String?
-  isActive           Boolean  @default(true)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  status             String   @default("ACTIVE")
-  phone              String?
-  address            String?
-  lastLogin          DateTime?
-  branchName         String   @default("Head Office")
-  customerType       String   @default("STANDARD")
-  branch             Branch?  @relation(fields: [branchId], references: [id])
-  role               Role     @relation(fields: [roleId], references: [id])
-  reservations       StockReservation[] @relation("CustomerReservations")
-  createdReservations StockReservation[] @relation("EmployeeReservations")
-  assignedEmployeeId String?
-  assignedEmployee   User?    @relation("EmployeeCustomers", fields: [assignedEmployeeId], references: [id])
-  customers          User[]   @relation("EmployeeCustomers")
-  notifications      Notification[]
+  id                       String             @id @default(uuid())
+  name                     String
+  email                    String             @unique
+  passwordHash             String
+  roleId                   String
+  branchId                 String?
+  isActive                 Boolean            @default(true)
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
+  status                   String             @default("ACTIVE")
+  phone                    String?
+  address                  String?
+  lastLogin                DateTime?
+  currentLoginAt           DateTime?
+  lastLoginAt              DateTime?
+  branchName               String             @default("Head Office")
+  customerType             String             @default("STANDARD")
+  assignedEmployeeId       String?
+  inheritBranchPermissions Boolean            @default(true)
   pagePermissions          String?
-  inheritBranchPermissions Boolean  @default(true)
+  notifications            Notification[]
   purchaseOrders           PurchaseOrder[]
+  reservations             StockReservation[] @relation("CustomerReservations")
+  createdReservations      StockReservation[] @relation("EmployeeReservations")
+  assignedEmployee         User?              @relation("EmployeeCustomers", fields: [assignedEmployeeId], references: [id])
+  customers                User[]             @relation("EmployeeCustomers")
+  branch                   Branch?            @relation(fields: [branchId], references: [id])
+  role                     Role               @relation(fields: [roleId], references: [id])
 
   @@index([roleId])
   @@index([branchId])
@@ -48,11 +50,11 @@ model Role {
 }
 
 model Branch {
-  id          String      @id @default(uuid())
-  name        String      @unique
-  inventories Inventory[]
-  users       User[]
-  pagePermissions          String?
+  id              String      @id @default(uuid())
+  name            String      @unique
+  pagePermissions String?
+  inventories     Inventory[]
+  users           User[]
 }
 
 model Category {
@@ -62,20 +64,20 @@ model Category {
 }
 
 model Product {
-  id             String      @id @default(uuid())
-  sku            String      @unique
+  id             String             @id @default(uuid())
+  sku            String             @unique
   name           String
   categoryId     String
   brand          String
-  serialTracking Boolean     @default(false)
+  serialTracking Boolean            @default(false)
   barcode        String?
-  reorderLevel   Int         @default(10)
-  safetyStock    Int         @default(5)
-  status         String      @default("ACTIVE")
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  reorderLevel   Int                @default(10)
+  safetyStock    Int                @default(5)
+  status         String             @default("ACTIVE")
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
   inventories    Inventory[]
-  category       Category    @relation(fields: [categoryId], references: [id])
+  category       Category           @relation(fields: [categoryId], references: [id])
   reservations   StockReservation[]
 
   @@index([brand])
@@ -178,68 +180,27 @@ model ProductPriceHistory {
   @@index([updatedAt])
 }
 
-model ChatSession {
-  id        String        @id @default(uuid())
-  userId    String
-  title     String
-  createdAt DateTime      @default(now())
-  messages  ChatMessage[]
-
-  @@index([userId])
-}
-
-model ChatMessage {
-  id            String      @id @default(uuid())
-  chatSessionId String
-  sender        String
-  message       String
-  timestamp     DateTime    @default(now())
-  chatSession   ChatSession @relation(fields: [chatSessionId], references: [id], onDelete: Cascade)
-
-  @@index([chatSessionId])
-}
-
-model AIQueryLog {
-  id             String   @id @default(uuid())
-  userId         String
-  question       String
-  generatedQuery String?
-  executionTime  Float?
-  timestamp      DateTime @default(now())
-
-  @@index([userId])
-}
-
-model AIAuditLog {
-  id               String   @id @default(uuid())
-  userId           String
-  permissionPassed Boolean
-  actionChecked    String
-  timestamp        DateTime @default(now())
-
-  @@index([userId])
-}
 
 model StockReservation {
-  id                String   @id @default(uuid())
-  reservationNumber String   @unique
+  id                String    @id @default(uuid())
+  reservationNumber String    @unique
   customerId        String
   employeeId        String?
   productId         String
   sku               String
-  branchCode        String   @default("HYD-HQ")
+  branchCode        String    @default("HYD-HQ")
   quantity          Int
-  status            String   @default("PENDING") // PENDING, ACCEPTED, REJECTED, CANCELLED, EXPIRED
+  status            String    @default("PENDING")
   notes             String?
-  reservedAt        DateTime @default(now())
+  reservedAt        DateTime  @default(now())
   expiresAt         DateTime
   acceptedAt        DateTime?
   rejectedAt        DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  user              User     @relation("CustomerReservations", fields: [customerId], references: [id])
-  employee          User?    @relation("EmployeeReservations", fields: [employeeId], references: [id])
-  product           Product  @relation(fields: [productId], references: [id])
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  user              User      @relation("CustomerReservations", fields: [customerId], references: [id])
+  employee          User?     @relation("EmployeeReservations", fields: [employeeId], references: [id])
+  product           Product   @relation(fields: [productId], references: [id])
 
   @@index([customerId])
   @@index([employeeId])
@@ -270,10 +231,10 @@ model PurchaseOrder {
   customerName       String
   dateReceived       DateTime @default(now())
   totalItems         Int
-  stockStatus        String   @default("Checking") // Checking, Available, Shortage
-  verificationStatus String   @default("Pending")  // Pending, PO Verified & Stock Available
+  stockStatus        String   @default("Checking")
+  verificationStatus String   @default("Pending")
   branchCode         String   @default("HYD-HQ")
-  itemsJson          String   @default("[]")      // Array of { sku: string, quantity: number }
+  itemsJson          String   @default("[]")
   user               User     @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
   @@index([customerId])

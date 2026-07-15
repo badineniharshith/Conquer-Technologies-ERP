@@ -133,42 +133,42 @@ export default function SearchableDropdown({
             setTimeout(() => inputRef.current?.focus(), 50);
           }
         }}
-        className={`w-full flex items-center justify-between px-3 py-2 bg-stone-50 border rounded-lg text-left transition-all ${
+        className={`w-full flex items-center justify-between px-3 py-2.5 bg-stone-50 border rounded-xl text-left transition-all duration-200 ${
           isOpen
-            ? "border-orange-500 ring-1 ring-orange-500/10 bg-white"
-            : "border-stone-250 hover:border-orange-500/50 hover:bg-stone-100/50"
-        } ${disabled || loading ? "opacity-55 cursor-not-allowed" : "cursor-pointer"} text-stone-850 font-medium`}
+            ? "border-orange-500 ring-4 ring-orange-500/10 bg-white"
+            : "border-stone-250 hover:border-orange-550/50 hover:bg-stone-50"
+        } ${disabled || loading ? "opacity-55 cursor-not-allowed" : "cursor-pointer"} text-stone-800 font-semibold shadow-sm`}
       >
         <span className={selectedOption ? "text-stone-850" : "text-stone-400"}>
           {selectedOption ? selectedOption.label : placeholder}
         </span>
         {loading ? (
-          <Loader2 className="w-3.5 h-3.5 animate-spin text-orange-500" />
+          <Loader2 className="w-4 h-4 animate-spin text-orange-550" />
         ) : (
-          <ChevronDown className={`w-3.5 h-3.5 text-stone-400 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+          <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
         )}
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 z-50 mt-1.5 w-full origin-top-right rounded-xl bg-white border border-stone-200 shadow-lg ring-1 ring-black/5 animate-in fade-in-20 duration-100">
-          <div className="p-2 border-b border-stone-100 flex items-center space-x-2">
-            <Search className="w-3.5 h-3.5 text-stone-400 shrink-0" />
+        <div className="absolute left-0 right-0 z-50 mt-2 w-full origin-top rounded-2xl bg-white border border-stone-200 shadow-2xl ring-1 ring-black/5 animate-in fade-in-30 slide-in-from-top-2 duration-200 overflow-hidden">
+          <div className="p-2.5 border-b border-stone-100 flex items-center space-x-2 bg-stone-50/50">
+            <Search className="w-4 h-4 text-stone-400 shrink-0" />
             <input
               ref={inputRef}
               type="text"
-              placeholder="Search..."
+              placeholder="Type to search..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-transparent text-xs text-stone-850 placeholder-stone-400 outline-none"
+              className="w-full bg-transparent text-xs text-stone-800 placeholder-stone-400 outline-none font-medium"
             />
           </div>
 
           <div
             ref={listRef}
-            className="max-h-48 overflow-y-auto p-1 space-y-0.5"
+            className="max-h-56 overflow-y-auto p-1.5 space-y-1 bg-white"
           >
             {filteredOptions.length === 0 ? (
-              <div className="px-3 py-2 text-center text-stone-450 italic text-[11px]">
+              <div className="px-4 py-3 text-center text-stone-400 italic text-[11px]">
                 No options found
               </div>
             ) : (
@@ -180,12 +180,12 @@ export default function SearchableDropdown({
                     key={opt.value}
                     type="button"
                     onClick={() => handleSelect(opt.value)}
-                    className={`w-full text-left px-3 py-1.5 rounded-lg text-xs transition-colors flex items-center justify-between ${
+                    className={`w-full text-left px-3 py-2 rounded-xl text-xs transition-all flex items-center justify-between ${
                       isSelected
-                        ? "bg-orange-500 text-white font-bold"
+                        ? "bg-orange-500 text-white font-bold shadow-md shadow-orange-550/15"
                         : isActive
-                        ? "bg-orange-50 text-orange-700 font-semibold"
-                        : "hover:bg-stone-50 text-stone-700 hover:text-stone-900"
+                        ? "bg-orange-550/10 text-orange-700 font-semibold"
+                        : "hover:bg-stone-50 text-stone-700 hover:text-stone-900 font-medium"
                     }`}
                   >
                     <span className="truncate">{opt.label}</span>

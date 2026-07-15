@@ -1271,7 +1271,7 @@ export default function DashboardClient({
         <p className="text-stone-500 mt-1 text-xs md:text-sm">{subtitle}</p>
       </div>
 
-      <div className="flex items-center space-x-3 w-full md:w-auto self-stretch md:self-auto justify-end">
+      <div className="flex flex-wrap items-center gap-3 w-full md:w-auto self-stretch md:self-auto justify-start md:justify-end">
         {/* Only allow branch filtering for non-branch-specific roles */}
         {!isBranchStaff && (
           <div className="flex items-center space-x-2 bg-white px-2.5 py-1.5 border border-stone-200 rounded-lg shadow-sm">

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useErpStore, UserRole } from "@/lib/store";
 import { logoutUserAction } from "@/app/actions";
+import logoImg from "../../../public/logo.png";
 import { toast } from "sonner";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -44,8 +45,8 @@ export const getMenuItems = (role: UserRole): MenuItem[] => {
       { title: "Pricing History", href: "/pricing/history", icon: TrendingUp },
       { title: "Stock Movement", href: "/stock-movement", icon: ArrowUpDown },
       { title: "Analytics", href: "/analytics", icon: BarChart3 },
-      { title: "AI Analytics", href: "/admin/ai-analytics", icon: Sparkles },
       { title: "Customers", href: "/admin/customers", icon: Users },
+      { title: "Employees", href: "/admin/employees", icon: Users },
       { title: "Stock Reservations", href: "/reserved-stock", icon: Boxes },
       { title: "PO Received & Stock Checker", href: "/purchase-orders", icon: ClipboardList },
       { title: "Settings", href: "/settings", icon: Settings },
@@ -61,6 +62,7 @@ export const getMenuItems = (role: UserRole): MenuItem[] => {
       { title: "Stock Movement", href: "/stock-movement", icon: ArrowUpDown },
       { title: "Analytics", href: "/analytics", icon: BarChart3 },
       { title: "Customers", href: "/admin/customers", icon: Users },
+      { title: "Employees", href: "/admin/employees", icon: Users },
       { title: "Stock Reservations", href: "/reserved-stock", icon: Boxes },
       { title: "PO Received & Stock Checker", href: "/purchase-orders", icon: ClipboardList },
       { title: "Settings", href: "/settings", icon: Settings },
@@ -158,11 +160,11 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
           >
-            <img src="/logo.png" alt="Conquer Logo" className="h-8 object-contain" />
+            <img src={logoImg.src} alt="Conquer Logo" className="h-[58px] object-contain" />
           </motion.div>
         ) : (
           <div className="flex justify-center w-full">
-            <img src="/logo.png" alt="Conquer Logo" className="h-7 w-7 rounded-full object-cover" />
+            <img src={logoImg.src} alt="Conquer Logo" className="h-[52px] w-[52px] rounded-full object-cover" />
           </div>
         )}
 
