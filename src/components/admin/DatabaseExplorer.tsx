@@ -86,30 +86,6 @@ const tableMetadataDetails: Record<string, {
     foreignKeys: [],
     relationships: [],
     lastUpdated: "2026-06-29 13:50:00"
-  },
-  chatSessions: {
-    primaryKey: "id",
-    foreignKeys: [],
-    relationships: ["ChatSession has many ChatMessages"],
-    lastUpdated: "2026-06-29 13:54:00"
-  },
-  chatMessages: {
-    primaryKey: "id",
-    foreignKeys: ["chatSessionId"],
-    relationships: ["ChatMessage belongs to ChatSession"],
-    lastUpdated: "2026-06-29 13:54:00"
-  },
-  aiQueryLogs: {
-    primaryKey: "id",
-    foreignKeys: [],
-    relationships: [],
-    lastUpdated: "2026-06-29 13:55:00"
-  },
-  aiAuditLogs: {
-    primaryKey: "id",
-    foreignKeys: [],
-    relationships: [],
-    lastUpdated: "2026-06-29 13:55:00"
   }
 };
 

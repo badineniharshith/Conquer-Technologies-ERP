@@ -33,7 +33,6 @@ const LEVEL_ROUTES: Record<1 | 2 | 3, string[]> = {
     "/analytics",
     "/admin",
     "/settings",
-    "/ai-agent",
     "/reserved-stock",
     "/purchase-orders",
   ],
@@ -44,7 +43,6 @@ const LEVEL_ROUTES: Record<1 | 2 | 3, string[]> = {
     "/price-history",
     "/stock-movement",
     "/analytics",
-    "/ai-agent",
     "/reserved-stock",
     "/purchase-orders",
   ],
@@ -53,20 +51,20 @@ const LEVEL_ROUTES: Record<1 | 2 | 3, string[]> = {
     "/products",
     "/price-history",
     "/recommendations",
-    "/ai-agent",
     "/reserved-stock",
     "/purchase-orders",
   ],
 };
 
 // Pages that any visitor (even unauthenticated) can access
-const PUBLIC_PAGES = ["/login", "/ai-login", "/register"];
+const PUBLIC_PAGES = ["/login", "/register"];
 
 // Pages that any authenticated user can access (system pages)
 const ALWAYS_ALLOWED = ["/logout", "/403"];
 
 export async function proxy(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
+
 
   // 1. Skip static assets and API routes — they handle their own auth
   if (
@@ -178,3 +176,7 @@ export const config = {
     "/((?!api|_next/static|_next/image|favicon.ico).*)",
   ],
 };
+
+export { proxy as middleware };
+export default proxy;
+

@@ -17,10 +17,6 @@ interface MockDbState {
   stockAlerts: any[];
   productPrices: any[];
   productPriceHistory: any[];
-  chatSessions: any[];
-  chatMessages: any[];
-  aiQueryLogs: any[];
-  aiAuditLogs: any[];
   stockReservations: any[];
   notifications: any[];
   purchaseOrders: any[];
@@ -91,10 +87,6 @@ if (!globalForMockDb.mockDb) {
     stockAlerts: initialStockAlerts,
     productPrices: initialProductPrices,
     productPriceHistory: initialProductPriceHistory,
-    chatSessions: [],
-    chatMessages: [],
-    aiQueryLogs: [],
-    aiAuditLogs: [],
     stockReservations: [],
     notifications: [],
     purchaseOrders: [
@@ -202,24 +194,12 @@ const makeProxy = (key: keyof MockDbState, prismaModel: any) => ({
   },
   findUnique: async (args?: { where: Record<string, any> }) => {
     if (isDatabaseConnected() && prismaModel) {
-      if (key === "chatSessions") {
-        return await prismaModel.findUnique({
-          where: args?.where,
-          include: { messages: { orderBy: { timestamp: "asc" } } }
-        });
-      }
       return await prismaModel.findUnique({ where: args?.where });
     }
     if (!args || !args.where) return null;
     const found = mockStore[key]?.find((x: any) => {
       return Object.entries(args.where).every(([k, v]) => x[k] === v);
     }) || null;
-    if (key === "chatSessions" && found) {
-      return {
-        ...found,
-        messages: mockStore.chatMessages.filter(m => m.chatSessionId === found.id).sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-      };
-    }
     return found;
   },
   create: async (args: { data: any }) => {
@@ -282,10 +262,10 @@ export const erpDb = {
   users: {
     findMany: async (args?: any) => {
       if (isDatabaseConnected()) {
-        const queryArgs = {
-          ...args,
-          include: args?.include || { role: true, branch: true }
-        };
+        const queryArgs = { ...args };
+        if (!queryArgs.select && !queryArgs.include) {
+          queryArgs.include = { role: true, branch: true };
+        }
         const dbUsers = await prisma.user.findMany(queryArgs);
         return dbUsers.map(mapDbUser);
       }
@@ -349,6 +329,27 @@ export const erpDb = {
       if (idx === -1) throw new Error("User not found");
       mockStore.users[idx] = { ...mockStore.users[idx], ...args.data };
       return mockStore.users[idx];
+    },
+    delete: async (args: { where: { id: string } }) => {
+      if (isDatabaseConnected()) {
+        await prisma.stockReservation.deleteMany({
+          where: { customerId: args.where.id }
+        });
+        await prisma.notification.deleteMany({
+          where: { userId: args.where.id }
+        });
+        return await prisma.user.delete({
+          where: { id: args.where.id }
+        });
+      }
+      const idx = mockStore.users.findIndex(u => u.id === args.where.id);
+      if (idx === -1) throw new Error("User not found");
+      const deleted = mockStore.users[idx];
+      mockStore.stockReservations = mockStore.stockReservations.filter((x: any) => x.customerId !== args.where.id);
+      mockStore.notifications = mockStore.notifications.filter((x: any) => x.userId !== args.where.id);
+      mockStore.purchaseOrders = mockStore.purchaseOrders.filter((x: any) => x.customerId !== args.where.id);
+      mockStore.users.splice(idx, 1);
+      return deleted;
     }
   },
 
@@ -391,10 +392,10 @@ export const erpDb = {
   products: {
     findMany: async (args?: any) => {
       if (isDatabaseConnected()) {
-        const queryArgs = {
-          ...args,
-          include: args?.include || { category: true }
-        };
+        const queryArgs = { ...args };
+        if (!queryArgs.select && !queryArgs.include) {
+          queryArgs.include = { category: true };
+        }
         return await prisma.product.findMany(queryArgs);
       }
       return mockFindMany("products", args).map(p => ({
@@ -479,43 +480,7 @@ export const erpDb = {
     }
   },
 
-  chatSessions: {
-    findMany: async (args?: { where?: { userId: string } }) => {
-      if (isDatabaseConnected()) {
-        return await prisma.chatSession.findMany({
-          where: args?.where,
-          orderBy: { createdAt: "desc" }
-        });
-      }
-      if (args && args.where && args.where.userId) {
-        const uid = args.where.userId;
-        return mockStore.chatSessions.filter(s => s.userId === uid).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      }
-      return mockStore.chatSessions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    },
-    findUnique: async (args: { where: { id: string } }) => {
-      if (isDatabaseConnected()) {
-        return await prisma.chatSession.findUnique({
-          where: { id: args.where.id },
-          include: { messages: { orderBy: { timestamp: "asc" } } }
-        });
-      }
-      const s = mockStore.chatSessions.find(x => x.id === args.where.id);
-      if (!s) return null;
-      return {
-        ...s,
-        messages: mockStore.chatMessages.filter(m => m.chatSessionId === s.id).sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-      };
-    },
-    create: async (args: { data: { userId: string; title: string } }) => {
-      if (isDatabaseConnected()) {
-        return await prisma.chatSession.create({ data: args.data });
-      }
-      const s = { id: `sess-${Date.now()}`, userId: args.data.userId, title: args.data.title, createdAt: new Date() };
-      mockStore.chatSessions.push(s);
-      return s;
-    }
-  },
+
 
   stockReservations: {
     findMany: async (args?: any) => {
@@ -646,8 +611,5 @@ export const erpDb = {
   inventoryMovements: makeProxy("inventoryMovements", prisma.inventoryMovement),
   stockAlerts: makeProxy("stockAlerts", prisma.stockAlert),
   productPrices: makeProxy("productPrices", prisma.productPrice),
-  productPriceHistory: makeProxy("productPriceHistory", prisma.productPriceHistory),
-  chatMessages: makeProxy("chatMessages", prisma.chatMessage),
-  aiQueryLogs: makeProxy("aiQueryLogs", prisma.aIQueryLog),
-  aiAuditLogs: makeProxy("aiAuditLogs", prisma.aIAuditLog)
+  productPriceHistory: makeProxy("productPriceHistory", prisma.productPriceHistory)
 };

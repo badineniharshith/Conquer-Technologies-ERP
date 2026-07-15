@@ -36,7 +36,6 @@ export default function CommandPalette() {
     { name: "Go to Product Master", category: "Navigation", icon: ArrowRight, roles: ["SUPER_ADMIN", "ADMIN", "SALES_HEAD"], action: () => { router.push("/products"); setCommandPaletteOpen(false); } },
     { name: "Go to Price Master", category: "Navigation", icon: ArrowRight, roles: ["SUPER_ADMIN", "ADMIN", "SALES_HEAD", "REGIONAL_SALES_MANAGER", "BRANCH_MANAGER", "SALES_MANAGER", "SALES_EXECUTIVE", "CUSTOMER"], action: () => { router.push("/pricing"); setCommandPaletteOpen(false); } },
     { name: "Go to Alerts Engine", category: "Navigation", icon: ArrowRight, roles: ["SUPER_ADMIN", "ADMIN", "SALES_HEAD", "REGIONAL_SALES_MANAGER", "BRANCH_MANAGER", "SALES_MANAGER", "SALES_EXECUTIVE"], action: () => { router.push("/alerts"); setCommandPaletteOpen(false); } },
-    { name: "Go to AI Inventory Chat", category: "Navigation", icon: ArrowRight, roles: ["SUPER_ADMIN", "ADMIN", "SALES_HEAD", "REGIONAL_SALES_MANAGER", "BRANCH_MANAGER", "SALES_MANAGER", "SALES_EXECUTIVE", "CUSTOMER"], action: () => { router.push("/assistant"); setCommandPaletteOpen(false); } },
     { name: "Go to System Config", category: "Navigation", icon: ArrowRight, roles: ["SUPER_ADMIN", "ADMIN"], action: () => { router.push("/settings"); setCommandPaletteOpen(false); } },
     
     // Quick Actions

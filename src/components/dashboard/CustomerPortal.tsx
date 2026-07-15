@@ -274,25 +274,20 @@ export default function CustomerPortal({ products, inventory, prices }: Customer
       {/* 1. TOP KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: "Total Purchases", value: `₹${totalSpending.toLocaleString()}`, icon: DollarSign, color: "text-emerald-600 bg-emerald-50 border-emerald-100" },
-          { label: "Total Orders", value: `${orders.length} Orders`, icon: ShoppingCart, color: "text-blue-600 bg-blue-50 border-blue-100" },
-          { label: "Avg. Order Value", value: `₹${averageOrderValue.toLocaleString()}`, icon: TrendingUp, color: "text-orange-600 bg-orange-50 border-orange-100" },
-          { label: "In-Stock Items", value: `${inStockItems} Products`, icon: Boxes, color: "text-amber-600 bg-amber-50 border-amber-100" }
+          { label: "Total Purchases", value: `₹${totalSpending.toLocaleString()}`, color: "text-stone-900" },
+          { label: "Total Orders", value: `${orders.length} Orders`, color: "text-stone-900" },
+          { label: "Avg. Order Value", value: `₹${averageOrderValue.toLocaleString()}`, color: "text-stone-900" },
+          { label: "In-Stock Items", value: `${inStockItems} Products`, color: "text-stone-900" }
         ].map((kpi, idx) => (
-          <div key={idx} className="bg-white p-4 border border-stone-200 rounded-2xl shadow-sm flex items-center space-x-3 transition-all hover:shadow-md hover:border-orange-500/20">
-            <div className={`p-2.5 rounded-xl border shrink-0 ${kpi.color}`}>
-              <kpi.icon className="w-5 h-5" />
-            </div>
-            <div>
-              <span className="text-[10px] text-stone-400 block font-bold uppercase tracking-wider">{kpi.label}</span>
-              <span className="text-sm md:text-base font-bold text-stone-900 block mt-0.5">{kpi.value}</span>
-            </div>
+          <div key={idx} className="bg-white p-5 border border-[#fed7aa] rounded-2xl shadow-sm space-y-1 hover:shadow-md hover:border-orange-500/30 transition-all duration-300">
+            <span className="text-[10px] text-stone-400 block font-bold uppercase tracking-wider">{kpi.label}</span>
+            <span className="text-xl md:text-2xl font-black text-stone-900 block mt-1">{kpi.value}</span>
           </div>
         ))}
       </div>
 
       {/* 2. COMPARISON SECTION */}
-      <div className="glass-panel p-5 bg-white border border-stone-200 rounded-2xl shadow-sm space-y-4">
+      <div className="bg-white border border-[#fed7aa] p-5 rounded-2xl shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
           <h2 className="text-xs font-bold uppercase tracking-wider text-stone-700 flex items-center gap-1.5">
             <ArrowRightLeft className="w-4 h-4 text-orange-500" />
@@ -404,7 +399,7 @@ export default function CustomerPortal({ products, inventory, prices }: Customer
       {/* 3. GRAPHS SECTION */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Monthly Trend Chart */}
-        <div className="lg:col-span-2 glass-panel p-5 bg-white border border-stone-200 rounded-2xl shadow-sm space-y-4">
+        <div className="lg:col-span-2 bg-white border border-[#fed7aa] p-5 rounded-2xl shadow-sm space-y-4 min-w-0">
           <h3 className="text-[10px] font-bold uppercase tracking-wider text-stone-500 flex items-center gap-1.5">
             <TrendingUp className="w-4 h-4 text-orange-500" />
             <span>Monthly Purchase Trend</span>
@@ -424,7 +419,7 @@ export default function CustomerPortal({ products, inventory, prices }: Customer
         </div>
 
         {/* Category Distribution Pie Chart */}
-        <div className="glass-panel p-5 bg-white border border-stone-200 rounded-2xl shadow-sm space-y-4">
+        <div className="bg-white border border-[#fed7aa] p-5 rounded-2xl shadow-sm space-y-4 min-w-0">
           <h3 className="text-[10px] font-bold uppercase tracking-wider text-stone-500 flex items-center gap-1.5">
             <Layers className="w-4 h-4 text-orange-500" />
             <span>Category Spending Distribution</span>
@@ -457,7 +452,7 @@ export default function CustomerPortal({ products, inventory, prices }: Customer
         </div>
 
         {/* Spending Comparison Bar Chart */}
-        <div className="glass-panel p-5 bg-white border border-stone-200 rounded-2xl shadow-sm space-y-4">
+        <div className="bg-white border border-[#fed7aa] p-5 rounded-2xl shadow-sm space-y-4 min-w-0">
           <h3 className="text-[10px] font-bold uppercase tracking-wider text-stone-500 flex items-center gap-1.5">
             <ArrowRightLeft className="w-4 h-4 text-orange-500" />
             <span>Spending Comparison (June vs July)</span>
@@ -480,7 +475,7 @@ export default function CustomerPortal({ products, inventory, prices }: Customer
         </div>
 
         {/* Top Purchased Products Chart */}
-        <div className="glass-panel p-5 bg-white border border-stone-200 rounded-2xl shadow-sm space-y-4">
+        <div className="bg-white border border-[#fed7aa] p-5 rounded-2xl shadow-sm space-y-4 min-w-0">
           <h3 className="text-[10px] font-bold uppercase tracking-wider text-stone-500 flex items-center gap-1.5">
             <ShoppingBag className="w-4 h-4 text-orange-500" />
             <span>Top Purchased Items (Quantity)</span>
@@ -499,7 +494,7 @@ export default function CustomerPortal({ products, inventory, prices }: Customer
         </div>
 
         {/* Order Status Donut Chart */}
-        <div className="glass-panel p-5 bg-white border border-stone-200 rounded-2xl shadow-sm space-y-4">
+        <div className="bg-white border border-[#fed7aa] p-5 rounded-2xl shadow-sm space-y-4 min-w-0">
           <h3 className="text-[10px] font-bold uppercase tracking-wider text-stone-500 flex items-center gap-1.5">
             <Info className="w-4 h-4 text-orange-500" />
             <span>Order Status Split</span>
@@ -529,7 +524,7 @@ export default function CustomerPortal({ products, inventory, prices }: Customer
       </div>
 
       {/* 4. RECENT ORDERS */}
-      <div className="glass-panel p-5 bg-white border border-stone-200 rounded-2xl shadow-sm space-y-4">
+      <div className="bg-white border border-[#fed7aa] p-5 rounded-2xl shadow-sm space-y-4 min-w-0">
         <h2 className="text-xs font-bold uppercase tracking-wider text-stone-700 flex items-center gap-1.5">
           <Clock className="w-4 h-4 text-orange-500" />
           <span>Recent Purchase Orders Log</span>
@@ -584,7 +579,7 @@ export default function CustomerPortal({ products, inventory, prices }: Customer
       </div>
 
       {/* 5. RECOMMENDATIONS */}
-      <div className="glass-panel p-5 bg-white border border-stone-200 rounded-2xl shadow-sm space-y-4">
+      <div className="bg-white border border-[#fed7aa] p-5 rounded-2xl shadow-sm space-y-4 min-w-0">
         <h2 className="text-xs font-bold uppercase tracking-wider text-stone-700 flex items-center gap-1.5">
           <ThumbsUp className="w-4 h-4 text-orange-500" />
           <span>Recommended Products for You</span>

@@ -1,6 +1,6 @@
 "use server";
 
-import { erpDb } from "@/lib/db";
+import { erpDb, prisma } from "@/lib/db";
 import { productCatalog } from "@/lib/catalog";
 import { revalidatePath } from "next/cache";
 import { signJwt, verifyJwt } from "@/lib/jwt";
@@ -49,11 +49,33 @@ export async function authenticateUserAction(email: string, passwordPlain: strin
     return { error: "Account registration has been REJECTED by Admin." };
   }
 
-  // Update lastLogin in PostgreSQL
-  await erpDb.users.update({
-    where: { id: user.id },
-    data: { lastLogin: new Date() }
-  });
+  // Update lastLogin tracking in a single database transaction if not mock, or simple update in mock mode
+  if (!erpDb.isMock()) {
+    await prisma.$transaction(async (tx) => {
+      const dbUser = await tx.user.findUnique({
+        where: { id: user.id },
+        select: { currentLoginAt: true }
+      });
+      await tx.user.update({
+        where: { id: user.id },
+        data: {
+          lastLoginAt: dbUser?.currentLoginAt || null,
+          currentLoginAt: new Date(),
+          lastLogin: new Date()
+        }
+      });
+    });
+  } else {
+    const currentMockUser = await erpDb.users.findUnique({ where: { id: user.id } });
+    await erpDb.users.update({
+      where: { id: user.id },
+      data: {
+        lastLoginAt: currentMockUser?.currentLoginAt || null,
+        currentLoginAt: new Date(),
+        lastLogin: new Date()
+      }
+    });
+  }
  
   // Sign JWT Session Token
   const token = await signJwt({
@@ -582,6 +604,56 @@ export async function updateCustomerAction(
   return { success: true, customer: result };
 }
 
+export async function createCustomerAction(data: {
+  name: string;
+  email: string;
+  phone?: string;
+  address?: string;
+  passwordPlain: string;
+  customerType?: string;
+}) {
+  const existing = await erpDb.users.findUnique({ where: { email: data.email } });
+  if (existing) {
+    throw new Error("Email address is already registered.");
+  }
+
+  const hashedPassword = bcrypt.hashSync(data.passwordPlain, 10);
+
+  const result = await erpDb.users.create({
+    data: {
+      name: data.name,
+      email: data.email,
+      passwordHash: hashedPassword,
+      roleId: "CUSTOMER",
+      branchName: "None",
+      status: "ACTIVE",
+      phone: data.phone || "",
+      address: data.address || "",
+      customerType: data.customerType || "STANDARD",
+      isActive: true
+    }
+  });
+
+  const performedBy = await getCurrentUserId();
+  auditLog("ADMIN_CUSTOMER_CREATE", performedBy, result.id, { email: result.email });
+  revalidatePath("/admin/customers");
+  revalidatePath("/settings");
+  return { success: true, customer: result };
+}
+
+export async function deleteCustomerAction(id: string) {
+  const result = await erpDb.users.delete({
+    where: { id }
+  });
+
+  const performedBy = await getCurrentUserId();
+  auditLog("ADMIN_CUSTOMER_DELETE", performedBy, id, { email: result.email });
+  revalidatePath("/admin/customers");
+  revalidatePath("/settings");
+  return { success: true };
+}
+
+
 export async function resetCustomerPasswordAction(id: string, newPasswordPlain: string) {
   const performedBy = await getCurrentUserId();
   const hashedPassword = bcrypt.hashSync(newPasswordPlain, 10);
@@ -886,13 +958,14 @@ export async function createReservationAction(data: {
   });
 
   const updatedReserved = invItem.reservedQty + data.quantity;
+  const updatedAllocated = invItem.allocatedQty || 0;
   await erpDb.inventory.update({
     where: { id: invItem.id },
     data: {
       reservedQty: updatedReserved,
-      availableQty: invItem.quantity - updatedReserved,
+      availableQty: invItem.quantity - updatedReserved - updatedAllocated,
       reservedStock: updatedReserved,
-      availableStock: invItem.quantity - updatedReserved
+      availableStock: invItem.quantity - updatedReserved - updatedAllocated
     }
   });
 
@@ -972,8 +1045,8 @@ export async function acceptReservationAction(reservationId: string, customerId:
         allocatedQty: updatedAllocated,
         reservedStock: updatedReserved,
         allocatedStock: updatedAllocated,
-        availableQty: invItem.quantity - updatedReserved,
-        availableStock: invItem.quantity - updatedReserved
+        availableQty: invItem.quantity - updatedReserved - updatedAllocated,
+        availableStock: invItem.quantity - updatedReserved - updatedAllocated
       }
     });
   }
@@ -1033,13 +1106,14 @@ export async function rejectReservationAction(reservationId: string, customerId:
   const invItem = allInv.find((i: any) => i.sku === reservation.sku && i.branchCode === reservation.branchCode);
   if (invItem) {
     const updatedReserved = Math.max(0, invItem.reservedQty - reservation.quantity);
+    const updatedAllocated = invItem.allocatedQty || 0;
     await erpDb.inventory.update({
       where: { id: invItem.id },
       data: {
         reservedQty: updatedReserved,
         reservedStock: updatedReserved,
-        availableQty: invItem.quantity - updatedReserved,
-        availableStock: invItem.quantity - updatedReserved
+        availableQty: invItem.quantity - updatedReserved - updatedAllocated,
+        availableStock: invItem.quantity - updatedReserved - updatedAllocated
       }
     });
   }
@@ -1100,8 +1174,8 @@ export async function purchaseReservedStockAction(reservationId: string) {
       quantity: updatedQty,
       reservedQty: updatedReserved,
       allocatedQty: updatedAllocated,
-      availableQty: updatedQty - updatedReserved,
-      availableStock: updatedQty - updatedReserved,
+      availableQty: updatedQty - updatedReserved - updatedAllocated,
+      availableStock: updatedQty - updatedReserved - updatedAllocated,
       reservedStock: updatedReserved,
       allocatedStock: updatedAllocated
     }
@@ -1258,8 +1332,8 @@ export async function cancelReservationAction(reservationId: string, userId: str
         allocatedQty: updatedAllocated,
         reservedStock: updatedReserved,
         allocatedStock: updatedAllocated,
-        availableQty: invItem.quantity - updatedReserved,
-        availableStock: invItem.quantity - updatedReserved
+        availableQty: invItem.quantity - updatedReserved - updatedAllocated,
+        availableStock: invItem.quantity - updatedReserved - updatedAllocated
       }
     });
   }

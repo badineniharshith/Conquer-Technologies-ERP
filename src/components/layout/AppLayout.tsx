@@ -35,7 +35,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   useEffect(() => {
     if (!mounted) return;
 
-    const isAuthPage = pathname === "/login" || pathname === "/register" || pathname === "/ai-login" || pathname === "/403" || pathname === "/404";
+    const isAuthPage = pathname === "/login" || pathname === "/register" || pathname === "/403" || pathname === "/404";
 
     if (isAuthenticated) {
       setSessionChecked(true);
@@ -75,22 +75,12 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
   // Client-side access control is fully handled by server-side proxy.ts middleware.
 
-  const isStandalonePage = pathname === "/login" || pathname === "/register" || pathname === "/ai-login" || pathname === "/ai-agent";
+  const isStandalonePage = pathname === "/login" || pathname === "/register";
 
   if (isStandalonePage) {
     return (
       <div className="min-h-screen bg-[#fff7ed]">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={pathname}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          >
-            {children}
-          </motion.div>
-        </AnimatePresence>
+        {children}
         <Toaster richColors position="top-right" theme="light" />
       </div>
     );
@@ -106,7 +96,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
       {/* Main content — offset by sidebar width on desktop */}
       <div
-        className={`flex-1 flex flex-col min-h-screen transition-all duration-300 ${
+        className={`flex-1 flex flex-col min-h-screen min-w-0 overflow-x-hidden transition-all duration-300 ${
           sidebarCollapsed ? "lg:pl-16" : "lg:pl-64"
         }`}
       >
@@ -116,17 +106,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
           {!mounted || !sessionChecked ? (
             <PageSkeleton />
           ) : (
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={pathname}
-                initial={{ opacity: 0, y: 10, filter: "blur(3px)" }}
-                animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                exit={{ opacity: 0, y: -6, filter: "blur(2px)" }}
-                transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-              >
-                {children}
-              </motion.div>
-            </AnimatePresence>
+            children
           )}
         </main>
       </div>

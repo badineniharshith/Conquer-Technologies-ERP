@@ -30,7 +30,12 @@ export default async function AdminCatchAllPage({ params }: PageProps) {
 
   // 3. Fetch data in parallel
   const [users, inventory] = await Promise.all([
-    erpDb.users.findMany(),
+    erpDb.users.findMany({
+      include: {
+        role: true,
+        branch: true,
+      }
+    }),
     erpDb.inventory.findMany(),
   ]);
 
