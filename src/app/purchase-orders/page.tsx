@@ -63,9 +63,17 @@ export default async function PurchaseOrdersPage() {
     })
   ]);
 
+  // Convert Decimal objects and Dates to serializable types for Client Component
+  const serializedPurchaseOrders = purchaseOrders.map((po: any) => ({
+    ...po,
+    totalAmount: po.totalAmount ? Number(po.totalAmount.toString()) : 0,
+    dateReceived: po.dateReceived instanceof Date ? po.dateReceived.toISOString() : po.dateReceived,
+    expectedDelivery: po.expectedDelivery instanceof Date ? po.expectedDelivery.toISOString() : po.expectedDelivery,
+  }));
+
   return (
     <PurchaseOrdersClient
-      initialPurchaseOrders={purchaseOrders}
+      initialPurchaseOrders={serializedPurchaseOrders}
       users={users}
       branches={branches}
       products={products}
