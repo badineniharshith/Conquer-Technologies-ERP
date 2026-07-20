@@ -50,7 +50,7 @@ export async function GET(
       });
     }
 
-    const computedStockState = stockSufficient ? 'In Stock' : 'Partial Shortage';
+    const computedStockState = stockSufficient ? 'Available' : 'Insufficient';
     await erpDb.purchaseOrders.update({
       where: { id },
       data: { stockStatus: computedStockState }
@@ -121,7 +121,7 @@ export async function GET(
           });
         }
 
-        const computedStockState = stockSufficient ? 'In Stock' : 'Partial Shortage';
+        const computedStockState = stockSufficient ? 'Available' : 'Insufficient';
         await tx.purchaseOrder.update({
           where: { id },
           data: { stockStatus: computedStockState }

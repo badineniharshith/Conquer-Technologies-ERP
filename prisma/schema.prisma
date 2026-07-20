@@ -32,6 +32,7 @@ model User {
   purchaseOrders           PurchaseOrder[]
   reservations             StockReservation[] @relation("CustomerReservations")
   createdReservations      StockReservation[] @relation("EmployeeReservations")
+  opportunities            Opportunity[]
   assignedEmployee         User?              @relation("EmployeeCustomers", fields: [assignedEmployeeId], references: [id])
   customers                User[]             @relation("EmployeeCustomers")
   branch                   Branch?            @relation(fields: [branchId], references: [id])
@@ -79,6 +80,7 @@ model Product {
   inventories    Inventory[]
   category       Category           @relation(fields: [categoryId], references: [id])
   reservations   StockReservation[]
+  poItems        PoItem[]
 
   @@index([brand])
   @@index([categoryId])
@@ -225,18 +227,94 @@ model Notification {
 }
 
 model PurchaseOrder {
-  id                 String   @id @default(uuid())
-  poNumber           String   @unique
+  id                 String       @id @default(uuid())
+  poNumber           String       @unique
   customerId         String
   customerName       String
-  dateReceived       DateTime @default(now())
+  companyName        String       @default("")
+  vendorId           String?
+  totalAmount        Decimal      @default(0) @db.Decimal(10, 2)
+  dateReceived       DateTime     @default(now())
+  expectedDelivery   DateTime?
   totalItems         Int
-  stockStatus        String   @default("Checking")
-  verificationStatus String   @default("Pending")
-  branchCode         String   @default("HYD-HQ")
-  itemsJson          String   @default("[]")
-  user               User     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  stockStatus        String       @default("Checking")
+  verificationStatus String       @default("Pending")
+  verifiedBy         String?
+  verifiedDate       DateTime?
+  branchCode         String       @default("HYD-HQ")
+  itemsJson          String       @default("[]")
+  user               User         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  vendor             Vendor?      @relation(fields: [vendorId], references: [id])
+  opportunity        Opportunity?
+  poItems            PoItem[]
 
   @@index([customerId])
+  @@index([vendorId])
   @@index([branchCode])
+  @@index([verificationStatus])
+  @@index([dateReceived])
+  @@index([customerId, verificationStatus])
+}
+
+model Opportunity {
+  id                 String        @id @default(uuid())
+  opportunityNumber  String        @unique
+  customerId         String
+  customerName       String
+  companyName        String        @default("")
+  purchaseOrderId    String        @unique
+  productDetails     String        @default("[]")
+  totalQuantity      Int           @default(0)
+  reservationDate    DateTime      @default(now())
+  expiryDate         DateTime
+  status             String        @default("OPEN")
+  notes              String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  purchaseOrder      PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  user               User          @relation(fields: [customerId], references: [id])
+
+  @@index([customerId])
+  @@index([status])
+  @@index([purchaseOrderId])
+  @@index([createdAt])
+}
+
+// ─── erpstructure models ──────────────────────────────────────────────────────
+
+model Vendor {
+  id             String          @id @default(uuid())
+  name           String
+  contactPerson  String          @default("")
+  email          String          @default("")
+  phone          String          @default("")
+  address        String          @default("")
+  gstNumber      String          @default("")
+  status         String          @default("ACTIVE")
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  purchaseOrders PurchaseOrder[]
+
+  @@index([status])
+  @@index([name])
+}
+
+model PoItem {
+  id            String        @id @default(uuid())
+  poId          String
+  productId     String
+  sku           String
+  productName   String        @default("")
+  quantity      Int
+  unitPrice     Decimal       @default(0) @db.Decimal(10, 2)
+  itemStatus    String        @default("Pending")
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  purchaseOrder PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [id])
+
+  @@index([poId])
+  @@index([productId])
+  @@index([sku])
+  @@index([itemStatus])
 }

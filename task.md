@@ -27,3 +27,46 @@
 - `[x]` Step 11: Remove delete option in customer table and remove register buttons/links in login and AI login pages
 - `[x]` Step 12: Implement transactional Last Login tracking with custom formatting and privacy restrictions
 
+## Phase 1: Database Schema
+- [x] Update `prisma/schema.prisma` — add Opportunity model, update PurchaseOrder fields
+- [x] Run `prisma db push` / direct SQL migration to sync schema with live DB without data loss
+
+## Phase 2: Database Layer (db.ts)
+- [x] Add `opportunities` proxy to `erpDb`
+- [x] Update `MockDbState` to include opportunities
+- [x] Update mock PO status strings to "Pending"/"Verified"
+
+## Phase 3: Server Actions (actions.ts)
+- [x] Revamp `verifyPurchaseOrderAction` — single-step verify, create Opportunity, update inventory
+- [x] Add `lookupPurchaseOrderByNumberAction` — auto-fill by PO number
+- [x] Add `createOpportunityAction` — create Opportunity record
+- [x] Update `checkAndExpireReservationsAction` — update Opportunity status on expiry
+- [x] Update `createPurchaseOrderAction` — add companyName, expectedDelivery
+
+## Phase 4: PO Verification UI
+- [x] Update `PurchaseOrdersClient.tsx` — single Verify Stock button, status badges, customer isolation, company/delivery columns
+- [x] Update `UnifiedPOAutoChecker.tsx` — add Verify Stock action inside audit modal
+- [x] Update audit API route for new status strings
+
+## Phase 5: New Pages
+- [x] Create `/src/app/opportunities/page.tsx`
+- [x] Create `/src/components/opportunities/OpportunitiesClient.tsx`
+- [x] Create `/src/app/api/cron/expire-reservations/route.ts`
+
+## Phase 6: Navigation & Sidebar
+- [x] Update `Sidebar.tsx` — add Opportunities for Admin/Employee, tighten Customer nav
+
+## Phase 7: Verification
+- [x] Run `npm run build` to check TypeScript compilation
+- [x] Validate DB migration completed successfully
+
+## Phase 8: PO Relational Database & Vendor Flow
+- [x] Add Vendor and PoItem relational models to `prisma/schema.prisma`
+- [x] Implement vendor, product, and price auto-fill in PO creation form
+- [x] Wire live per-item `itemStatus` update into stock verification action
+- [x] Configure WebP/AVIF and gzip performance optimizations in Next.js config
+- [x] Perform full production build compilation validation
+- [x] Enforce 'Admin@123' password policy on all accounts (live DB and SQL dump)
+- [x] Show only email addresses under the login form for testing credentials
+
+

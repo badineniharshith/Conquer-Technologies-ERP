@@ -4,10 +4,64 @@ import PurchaseOrdersClient from "@/components/purchase-orders/PurchaseOrdersCli
 export const dynamic = "force-dynamic";
 
 export default async function PurchaseOrdersPage() {
-  const purchaseOrders = await erpDb.purchaseOrders.findMany();
-  const users = await erpDb.users.findMany();
-  const branches = await erpDb.branches.findMany();
-  const products = await erpDb.products.findMany();
+  // Load data in parallel, selecting only the necessary columns for faster query performance and limiting POs to 50
+  const [purchaseOrders, users, branches, products, vendors] = await Promise.all([
+    erpDb.purchaseOrders.findMany({
+      orderBy: { dateReceived: "desc" },
+      take: 50,
+      select: {
+        id: true,
+        poNumber: true,
+        customerId: true,
+        customerName: true,
+        companyName: true,
+        vendorId: true,
+        totalAmount: true,
+        dateReceived: true,
+        expectedDelivery: true,
+        totalItems: true,
+        verificationStatus: true,
+        stockStatus: true,
+        branchCode: true,
+        itemsJson: true
+      }
+    }),
+    erpDb.users.findMany({
+      where: { roleId: "CUSTOMER", status: "ACTIVE" },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        roleId: true
+      }
+    }),
+    erpDb.branches.findMany({
+      select: {
+        id: true,
+        name: true
+      }
+    }),
+    erpDb.products.findMany({
+      where: { status: "ACTIVE" },
+      select: {
+        id: true,
+        sku: true,
+        name: true
+      }
+    }),
+    erpDb.vendors.findMany({
+      where: { status: "ACTIVE" },
+      select: {
+        id: true,
+        name: true,
+        contactPerson: true,
+        email: true,
+        phone: true,
+        address: true,
+        gstNumber: true
+      }
+    })
+  ]);
 
   return (
     <PurchaseOrdersClient
@@ -15,6 +69,7 @@ export default async function PurchaseOrdersPage() {
       users={users}
       branches={branches}
       products={products}
+      vendors={vendors}
     />
   );
 }

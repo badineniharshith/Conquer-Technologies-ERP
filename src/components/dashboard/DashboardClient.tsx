@@ -142,6 +142,10 @@ export default function DashboardClient({
   const [reservationsLoading, setReservationsLoading] = useState(true);
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
 
+  // Progressive loading states for sub-second dashboard performance
+  const [loadCharts, setLoadCharts] = useState(false);
+  const [loadReports, setLoadReports] = useState(false);
+
   useEffect(() => {
     // 1. Fetch products widget data
     fetch("/api/dashboard/products")
@@ -179,6 +183,10 @@ export default function DashboardClient({
         if (data.alerts) setAlerts(data.alerts);
         if (data.predictions) setPredictions(data.predictions);
         setAnalyticsLoading(false);
+
+        // Progressive load: render charts 50ms after data is ready, and heavy reports 150ms after that
+        setTimeout(() => setLoadCharts(true), 50);
+        setTimeout(() => setLoadReports(true), 200);
       })
       .catch(err => {
         console.error("Failed to load analytics:", err);
@@ -662,6 +670,14 @@ export default function DashboardClient({
   };
 
   const renderAdvancedAnalytics = () => {
+    if (!loadCharts) {
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <SkeletonTable />
+          <SkeletonTable />
+        </div>
+      );
+    }
     return (
       <div className="space-y-6">
         {/* Row 1: Low Stock Prediction & Smart Reorder Suggestions */}
@@ -1031,6 +1047,14 @@ export default function DashboardClient({
   };
 
   const renderSeasonalPeakSection = () => {
+    if (!loadReports) {
+      return (
+        <div className="bg-white border border-stone-200 rounded-2xl p-5 animate-pulse space-y-4">
+          <div className="h-4 bg-stone-200 rounded w-1/4"></div>
+          <div className="h-32 bg-stone-100 rounded"></div>
+        </div>
+      );
+    }
     return (
       <div className="bg-white border border-[#FED7AA] rounded-2xl p-5 space-y-6">
         <div className="flex justify-between items-start border-b pb-3">
