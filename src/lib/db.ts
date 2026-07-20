@@ -20,6 +20,9 @@ interface MockDbState {
   stockReservations: any[];
   notifications: any[];
   purchaseOrders: any[];
+  opportunities: any[];
+  vendors: any[];
+  poItems: any[];
 }
 
 const hashPassword = (plain: string) => bcrypt.hashSync(plain, 10);
@@ -90,10 +93,19 @@ if (!globalForMockDb.mockDb) {
     stockReservations: [],
     notifications: [],
     purchaseOrders: [
-      { id: "po-1", poNumber: "PO-2026-001", customerId: "u-customer", customerName: "Premium Customer", dateReceived: new Date("2026-07-01"), totalItems: 3, stockStatus: "Checking", verificationStatus: "Pending", branchCode: "HYD-HQ", itemsJson: JSON.stringify([{ sku: "LAP-APP-962657", quantity: 2 }, { sku: "LAP-HP-172551", quantity: 1 }]) },
-      { id: "po-2", poNumber: "PO-2026-002", customerId: "u-customer", customerName: "Premium Customer", dateReceived: new Date("2026-07-03"), totalItems: 5, stockStatus: "Available", verificationStatus: "PO Verified & Stock Available", branchCode: "BLR", itemsJson: JSON.stringify([{ sku: "PHN-GGL-844973", quantity: 5 }]) },
-      { id: "po-3", poNumber: "PO-2026-003", customerId: "u-customer", customerName: "Premium Customer", dateReceived: new Date("2026-07-05"), totalItems: 10, stockStatus: "Shortage", verificationStatus: "Pending", branchCode: "CHN", itemsJson: JSON.stringify([{ sku: "LAP-HP-172551", quantity: 10 }]) }
+      { id: "po-1", poNumber: "PO-2026-001", customerId: "u-customer", customerName: "Premium Customer", companyName: "Premium Corp", dateReceived: new Date("2026-07-01"), expectedDelivery: new Date("2026-07-15"), totalItems: 3, stockStatus: "Checking", verificationStatus: "Pending", verifiedBy: null, verifiedDate: null, branchCode: "HYD-HQ", itemsJson: JSON.stringify([{ sku: "LAP-APP-962657", quantity: 2 }, { sku: "LAP-HP-172551", quantity: 1 }]) },
+      { id: "po-2", poNumber: "PO-2026-002", customerId: "u-customer", customerName: "Premium Customer", companyName: "Premium Corp", dateReceived: new Date("2026-07-03"), expectedDelivery: new Date("2026-07-17"), totalItems: 5, stockStatus: "Available", verificationStatus: "Verified", verifiedBy: "u-admin", verifiedDate: new Date("2026-07-04"), branchCode: "BLR", itemsJson: JSON.stringify([{ sku: "PHN-GGL-844973", quantity: 5 }]) },
+      { id: "po-3", poNumber: "PO-2026-003", customerId: "u-customer", customerName: "Premium Customer", companyName: "Premium Corp", dateReceived: new Date("2026-07-05"), expectedDelivery: new Date("2026-07-20"), totalItems: 10, stockStatus: "Shortage", verificationStatus: "Pending", verifiedBy: null, verifiedDate: null, branchCode: "CHN", itemsJson: JSON.stringify([{ sku: "LAP-HP-172551", quantity: 10 }]) }
     ],
+    opportunities: [],
+    vendors: [
+      { id: "v-001", name: "TechSource Distributors", contactPerson: "Rajesh Kumar", email: "rajesh@techsource.in", phone: "+91 98760 11111", address: "Plot 12, HITEC City, Hyderabad, Telangana 500081", gstNumber: "36AABCT1234Z1ZX", status: "ACTIVE", createdAt: new Date(), updatedAt: new Date() },
+      { id: "v-002", name: "GlobalTech Supplies Pvt Ltd", contactPerson: "Priya Sharma", email: "priya@globaltech.in", phone: "+91 98760 22222", address: "B-42, Koramangala, Bengaluru, Karnataka 560034", gstNumber: "29AABCG5678Y2ZY", status: "ACTIVE", createdAt: new Date(), updatedAt: new Date() },
+      { id: "v-003", name: "Apex Electronics Hub", contactPerson: "Mohammed Farhan", email: "farhan@apexhub.in", phone: "+91 98760 33333", address: "44/1 Anna Nagar, Chennai, Tamil Nadu 600040", gstNumber: "33AABCA9012Z3ZZ", status: "ACTIVE", createdAt: new Date(), updatedAt: new Date() },
+      { id: "v-004", name: "MegaDistrib Solutions", contactPerson: "Sunita Patel", email: "sunita@megadistrib.in", phone: "+91 98760 44444", address: "Worli Sea Face, Mumbai, Maharashtra 400018", gstNumber: "27AABCM3456W4ZX", status: "ACTIVE", createdAt: new Date(), updatedAt: new Date() },
+      { id: "v-005", name: "Prime Components India", contactPerson: "Arjun Reddy", email: "arjun@primecomponents.in", phone: "+91 98760 55555", address: "Road No. 2, Banjara Hills, Hyderabad, Telangana 500034", gstNumber: "36AABCP7890V5ZY", status: "ACTIVE", createdAt: new Date(), updatedAt: new Date() }
+    ],
+    poItems: [],
   };
 }
 
@@ -361,9 +373,9 @@ export const erpDb = {
   },
 
   branches: {
-    findMany: async () => {
+    findMany: async (args?: any) => {
       if (isDatabaseConnected()) {
-        return await prisma.branch.findMany();
+        return await prisma.branch.findMany(args);
       }
       return mockStore.branches;
     }
@@ -577,39 +589,214 @@ export const erpDb = {
   purchaseOrders: {
     findMany: async (args?: any) => {
       if (isDatabaseConnected()) {
-        return await prisma.purchaseOrder.findMany(args);
+        const queryArgs = { ...args };
+        if (!queryArgs.select) {
+          queryArgs.include = { user: true, ...(queryArgs.include || {}) };
+        }
+        return await (prisma as any).purchaseOrder.findMany(queryArgs);
       }
-      return mockFindMany("purchaseOrders", args);
+      let items = mockFindMany("purchaseOrders", args);
+      return items.map((po: any) => ({
+        ...po,
+        user: mockStore.users.find(u => u.id === po.customerId)
+      }));
     },
-    findUnique: async (args: { where: { id: string } }) => {
+    findUnique: async (args: { where: { id?: string; poNumber?: string } }) => {
       if (isDatabaseConnected()) {
-        return await prisma.purchaseOrder.findUnique({ where: { id: args.where.id } });
+        return await (prisma as any).purchaseOrder.findUnique({
+          where: args.where as any,
+          include: { user: true }
+        });
       }
-      const found = mockStore.purchaseOrders.find(po => po.id === args.where.id) || null;
-      return found;
+      if (args.where.id) {
+        const found = mockStore.purchaseOrders.find(po => po.id === args.where.id) || null;
+        if (!found) return null;
+        return { ...found, user: mockStore.users.find(u => u.id === found.customerId) };
+      }
+      if (args.where.poNumber) {
+        const found = mockStore.purchaseOrders.find(po => po.poNumber === args.where.poNumber) || null;
+        if (!found) return null;
+        return { ...found, user: mockStore.users.find(u => u.id === found.customerId) };
+      }
+      return null;
     },
     create: async (args: { data: any }) => {
       if (isDatabaseConnected()) {
-        return await prisma.purchaseOrder.create({ data: args.data });
+        return await (prisma as any).purchaseOrder.create({ data: args.data, include: { user: true } });
       }
-      const item = { id: `po-${Date.now()}`, dateReceived: new Date(), ...args.data };
+      const item = { id: `po-${Date.now()}`, dateReceived: new Date(), companyName: "", verifiedBy: null, verifiedDate: null, ...args.data };
       mockStore.purchaseOrders.push(item);
-      return item;
+      return { ...item, user: mockStore.users.find(u => u.id === item.customerId) };
     },
     update: async (args: { where: { id: string }; data: any }) => {
       if (isDatabaseConnected()) {
-        return await prisma.purchaseOrder.update({ where: { id: args.where.id }, data: args.data });
+        return await (prisma as any).purchaseOrder.update({ where: { id: args.where.id }, data: args.data, include: { user: true } });
       }
       const idx = mockStore.purchaseOrders.findIndex(x => x.id === args.where.id);
       if (idx === -1) throw new Error("PurchaseOrder not found");
       mockStore.purchaseOrders[idx] = { ...mockStore.purchaseOrders[idx], ...args.data };
-      return mockStore.purchaseOrders[idx];
+      const po = mockStore.purchaseOrders[idx];
+      return { ...po, user: mockStore.users.find(u => u.id === po.customerId) };
     }
   },
+
+  opportunities: {
+    findMany: async (args?: any) => {
+      if (isDatabaseConnected()) {
+        return await (prisma as any).opportunity.findMany({
+          ...args,
+          include: { user: true, purchaseOrder: true, ...(args?.include || {}) }
+        });
+      }
+      return mockFindMany("opportunities", args).map((opp: any) => ({
+        ...opp,
+        user: mockStore.users.find(u => u.id === opp.customerId),
+        purchaseOrder: mockStore.purchaseOrders.find(po => po.id === opp.purchaseOrderId)
+      }));
+    },
+    findUnique: async (args: { where: { id?: string; purchaseOrderId?: string } }) => {
+      if (isDatabaseConnected()) {
+        return await (prisma as any).opportunity.findUnique({
+          where: args.where as any,
+          include: { user: true, purchaseOrder: true }
+        });
+      }
+      let found: any = null;
+      if (args.where.id) found = mockStore.opportunities.find(o => o.id === args.where.id) || null;
+      if (args.where.purchaseOrderId) found = mockStore.opportunities.find(o => o.purchaseOrderId === args.where.purchaseOrderId) || null;
+      if (!found) return null;
+      return {
+        ...found,
+        user: mockStore.users.find(u => u.id === found.customerId),
+        purchaseOrder: mockStore.purchaseOrders.find(po => po.id === found.purchaseOrderId)
+      };
+    },
+    create: async (args: { data: any }) => {
+      if (isDatabaseConnected()) {
+        return await (prisma as any).opportunity.create({ data: args.data, include: { user: true, purchaseOrder: true } });
+      }
+      const item = { id: `opp-${Date.now()}`, createdAt: new Date(), updatedAt: new Date(), ...args.data };
+      mockStore.opportunities.push(item);
+      return {
+        ...item,
+        user: mockStore.users.find(u => u.id === item.customerId),
+        purchaseOrder: mockStore.purchaseOrders.find(po => po.id === item.purchaseOrderId)
+      };
+    },
+    update: async (args: { where: { id: string }; data: any }) => {
+      if (isDatabaseConnected()) {
+        return await (prisma as any).opportunity.update({ where: { id: args.where.id }, data: args.data, include: { user: true, purchaseOrder: true } });
+      }
+      const idx = mockStore.opportunities.findIndex(o => o.id === args.where.id);
+      if (idx === -1) throw new Error("Opportunity not found");
+      mockStore.opportunities[idx] = { ...mockStore.opportunities[idx], ...args.data, updatedAt: new Date() };
+      const opp = mockStore.opportunities[idx];
+      return {
+        ...opp,
+        user: mockStore.users.find(u => u.id === opp.customerId),
+        purchaseOrder: mockStore.purchaseOrders.find(po => po.id === opp.purchaseOrderId)
+      };
+    }
+  },
+
   roles_raw: makeProxy("roles", prisma.role),
   categories_raw: makeProxy("categories", prisma.category),
   inventoryMovements: makeProxy("inventoryMovements", prisma.inventoryMovement),
   stockAlerts: makeProxy("stockAlerts", prisma.stockAlert),
   productPrices: makeProxy("productPrices", prisma.productPrice),
-  productPriceHistory: makeProxy("productPriceHistory", prisma.productPriceHistory)
+  productPriceHistory: makeProxy("productPriceHistory", prisma.productPriceHistory),
+
+  vendors: {
+    findMany: async (args?: any) => {
+      if (isDatabaseConnected()) {
+        return await (prisma as any).vendor.findMany(args);
+      }
+      return mockFindMany("vendors", args);
+    },
+    findUnique: async (args: { where: { id: string } }) => {
+      if (isDatabaseConnected()) {
+        return await (prisma as any).vendor.findUnique({ where: args.where });
+      }
+      return mockStore.vendors.find(v => v.id === args.where.id) || null;
+    },
+    create: async (args: { data: any }) => {
+      if (isDatabaseConnected()) {
+        return await (prisma as any).vendor.create({ data: args.data });
+      }
+      const item = { createdAt: new Date(), updatedAt: new Date(), ...args.data };
+      mockStore.vendors.push(item);
+      return item;
+    },
+    update: async (args: { where: { id: string }; data: any }) => {
+      if (isDatabaseConnected()) {
+        return await (prisma as any).vendor.update({ where: { id: args.where.id }, data: args.data });
+      }
+      const idx = mockStore.vendors.findIndex(v => v.id === args.where.id);
+      if (idx === -1) throw new Error("Vendor not found");
+      mockStore.vendors[idx] = { ...mockStore.vendors[idx], ...args.data, updatedAt: new Date() };
+      return mockStore.vendors[idx];
+    }
+  },
+
+  poItems: {
+    findMany: async (args?: any) => {
+      if (isDatabaseConnected()) {
+        return await (prisma as any).poItem.findMany(args);
+      }
+      return mockFindMany("poItems", args);
+    },
+    findUnique: async (args: { where: { id: string } }) => {
+      if (isDatabaseConnected()) {
+        return await (prisma as any).poItem.findUnique({ where: args.where });
+      }
+      return mockStore.poItems.find(p => p.id === args.where.id) || null;
+    },
+    createMany: async (args: { data: any[] }) => {
+      if (isDatabaseConnected()) {
+        return await (prisma as any).poItem.createMany({ data: args.data });
+      }
+      const items = args.data.map(d => ({ id: `poi-${Date.now()}-${Math.random().toString(36).slice(2)}`, createdAt: new Date(), updatedAt: new Date(), ...d }));
+      mockStore.poItems.push(...items);
+      return { count: items.length };
+    },
+    create: async (args: { data: any }) => {
+      if (isDatabaseConnected()) {
+        return await (prisma as any).poItem.create({ data: args.data });
+      }
+      const item = { id: `poi-${Date.now()}`, createdAt: new Date(), updatedAt: new Date(), ...args.data };
+      mockStore.poItems.push(item);
+      return item;
+    },
+    update: async (args: { where: { id: string }; data: any }) => {
+      if (isDatabaseConnected()) {
+        return await (prisma as any).poItem.update({ where: { id: args.where.id }, data: args.data });
+      }
+      const idx = mockStore.poItems.findIndex(p => p.id === args.where.id);
+      if (idx === -1) throw new Error("PoItem not found");
+      mockStore.poItems[idx] = { ...mockStore.poItems[idx], ...args.data, updatedAt: new Date() };
+      return mockStore.poItems[idx];
+    },
+    updateMany: async (args: { where: any; data: any }) => {
+      if (isDatabaseConnected()) {
+        return await (prisma as any).poItem.updateMany({ where: args.where, data: args.data });
+      }
+      let count = 0;
+      mockStore.poItems = mockStore.poItems.map(p => {
+        const matches = Object.entries(args.where).every(([k, v]) => p[k] === v);
+        if (matches) { count++; return { ...p, ...args.data, updatedAt: new Date() }; }
+        return p;
+      });
+      return { count };
+    },
+    deleteMany: async (args: { where: any }) => {
+      if (isDatabaseConnected()) {
+        return await (prisma as any).poItem.deleteMany({ where: args.where });
+      }
+      const before = mockStore.poItems.length;
+      mockStore.poItems = mockStore.poItems.filter(p => {
+        return !Object.entries(args.where).every(([k, v]) => p[k] === v);
+      });
+      return { count: before - mockStore.poItems.length };
+    }
+  }
 };

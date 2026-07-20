@@ -26,7 +26,8 @@ import {
   Users,
   Settings,
   LogOut,
-  ClipboardList
+  ClipboardList,
+  Target
 } from "lucide-react";
 
 interface MenuItem {
@@ -48,7 +49,7 @@ export const getMenuItems = (role: UserRole): MenuItem[] => {
       { title: "Customers", href: "/admin/customers", icon: Users },
       { title: "Employees", href: "/admin/employees", icon: Users },
       { title: "Stock Reservations", href: "/reserved-stock", icon: Boxes },
-      { title: "PO Received & Stock Checker", href: "/purchase-orders", icon: ClipboardList },
+      { title: "Purchase Orders", href: "/purchase-orders", icon: ClipboardList },
       { title: "Settings", href: "/settings", icon: Settings },
       { title: "Database Explorer", href: "/admin/database", icon: Database },
       { title: "Logout", href: "/logout", icon: LogOut },
@@ -64,7 +65,7 @@ export const getMenuItems = (role: UserRole): MenuItem[] => {
       { title: "Customers", href: "/admin/customers", icon: Users },
       { title: "Employees", href: "/admin/employees", icon: Users },
       { title: "Stock Reservations", href: "/reserved-stock", icon: Boxes },
-      { title: "PO Received & Stock Checker", href: "/purchase-orders", icon: ClipboardList },
+      { title: "Purchase Orders", href: "/purchase-orders", icon: ClipboardList },
       { title: "Settings", href: "/settings", icon: Settings },
       { title: "Database Explorer", href: "/admin/database", icon: Database },
       { title: "Logout", href: "/logout", icon: LogOut },
@@ -77,7 +78,7 @@ export const getMenuItems = (role: UserRole): MenuItem[] => {
       { title: "Stock Movement", href: "/stock-movement", icon: ArrowUpDown },
       { title: "Analytics", href: "/analytics", icon: BarChart3 },
       { title: "Stock Reservations", href: "/reserved-stock", icon: Boxes },
-      { title: "PO Received & Stock Checker", href: "/purchase-orders", icon: ClipboardList },
+      { title: "Purchase Orders", href: "/purchase-orders", icon: ClipboardList },
       { title: "Logout", href: "/logout", icon: LogOut },
     ],
     CUSTOMER: [
@@ -85,13 +86,17 @@ export const getMenuItems = (role: UserRole): MenuItem[] => {
       { title: "Products", href: "/products", icon: PlusCircle },
       { title: "Price History", href: "/price-history", icon: TrendingUp },
       { title: "Recommendations", href: "/recommendations", icon: Sparkles },
-      { title: "Reserved Stock", href: "/reserved-stock", icon: Boxes },
-      { title: "PO Received & Stock Checker", href: "/purchase-orders", icon: ClipboardList },
+      { title: "My Reservations", href: "/reserved-stock", icon: Boxes },
+      { title: "My Purchase Orders", href: "/purchase-orders", icon: ClipboardList },
       { title: "Logout", href: "/logout", icon: LogOut },
     ],
   };
 
-  return (items[role] || items.CUSTOMER || []) as MenuItem[];
+  // CRM role uses Employee menu + Opportunities
+  const roleMenu = items[role] || items.CUSTOMER || [];
+
+  // For unknown roles (including CRM), default to EMPLOYEE-like nav
+  return roleMenu as MenuItem[];
 };
 
 interface SidebarProps {

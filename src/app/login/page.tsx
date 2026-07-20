@@ -69,12 +69,10 @@ export default function LoginPage() {
   };
 
   const testCredentials = [
-    { label: "Super Admin", email: "superadmin@conquererp.com", pass: "Admin@2026#Secure", badge: "SUPER_ADMIN" },
-    { label: "CRM Admin", email: "admin@conquer.com", pass: "Admin@2026", badge: "ADMIN" },
-    { label: "CRM Exec Seema", email: "seema.hof@conquer.com", pass: "Admin@2026", badge: "EMPLOYEE" },
-    { label: "System Admin", email: "admin@conquererp.com", pass: "Admin@2026", badge: "ADMIN" },
-    { label: "Company Employee", email: "employee@conquererp.com", pass: "Employee@2026", badge: "EMPLOYEE" },
-    { label: "Premium Customer", email: "customer@gmail.com", pass: "Customer#2026", badge: "CUSTOMER" }
+    { label: "Super Admin", email: "superadmin@conquererp.com", pass: "Admin@123", badge: "SUPER_ADMIN" },
+    { label: "Admin", email: "admin@conquererp.com", pass: "Admin@123", badge: "ADMIN" },
+    { label: "Employee", email: "employee@conquererp.com", pass: "Admin@123", badge: "EMPLOYEE" },
+    { label: "Customer", email: "customer@gmail.com", pass: "Admin@123", badge: "CUSTOMER" }
   ];
 
   const containerVariants = {
@@ -299,10 +297,10 @@ export default function LoginPage() {
                       transition={{ delay: 0.5 + idx * 0.06, duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
                       whileHover={{ scale: 1.02, y: -0.5 }}
                       whileTap={{ scale: 0.98 }}
-                      className="p-2.5 bg-stone-50 border border-stone-200/60 rounded-xl text-xs font-semibold text-stone-700 transition-all text-left flex flex-col cursor-pointer hover:border-[#8c3120]/30 hover:bg-[#fdf4f2]"
+                      className="p-2.5 bg-stone-50 border border-stone-200/60 rounded-xl text-xs font-semibold text-stone-700 transition-all text-left flex flex-col cursor-pointer hover:border-[#8c3120]/30 hover:bg-[#fdf4f2] w-full"
                     >
-                      <span className="font-extrabold truncate text-stone-900">{cred.label}</span>
-                      <span className="text-[9px] sm:text-[10px] text-stone-400 font-semibold truncate mt-0.5">{cred.badge}</span>
+                      <span className="font-extrabold truncate text-stone-900 text-[11px]">{cred.email}</span>
+                      <span className="text-[9px] text-stone-400 font-bold tracking-wider uppercase mt-0.5">{cred.badge.replace('_', ' ')}</span>
                     </motion.button>
                   ))}
                 </div>
