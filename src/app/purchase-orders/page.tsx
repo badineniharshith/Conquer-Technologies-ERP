@@ -32,7 +32,12 @@ export default async function PurchaseOrdersPage() {
         id: true,
         name: true,
         email: true,
-        roleId: true
+        roleId: true,
+        customerId: true,
+        gstNumber: true,
+        companyName: true,
+        phone: true,
+        address: true
       }
     }),
     erpDb.branches.findMany({

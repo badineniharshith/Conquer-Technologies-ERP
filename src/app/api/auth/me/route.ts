@@ -30,14 +30,42 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Account rejected" }, { status: 403 });
     }
 
+    let assignedEmployee = null;
+    if (dbUser.assignedEmployeeId) {
+      const emp = await erpDb.users.findUnique({ where: { id: dbUser.assignedEmployeeId } });
+      if (emp) {
+        let managerName = null;
+        if (emp.reportsToId) {
+          const mgr = await erpDb.users.findUnique({ where: { id: emp.reportsToId } });
+          if (mgr) {
+            managerName = mgr.name;
+          }
+        }
+        assignedEmployee = {
+          id: emp.id,
+          employeeId: emp.employeeId || null,
+          name: emp.name,
+          email: emp.email,
+          phone: emp.phone || null,
+          branch: emp.branchName || emp.branch || "Head Office",
+          designation: emp.designation || "Operations Executive",
+          officeLocation: emp.city || emp.branchName || "Hyderabad",
+          reportsToName: managerName || null,
+        };
+      }
+    }
+
     return NextResponse.json({
       user: {
         id: dbUser.id,
+        customerId: dbUser.customerId || null,
         name: dbUser.name,
+        companyName: dbUser.companyName || dbUser.name,
         email: dbUser.email,
         role: dbUser.roleId === "RSM" ? "REGIONAL_SALES_MANAGER" : dbUser.roleId,
         branch: dbUser.branch || "Head Office",
-        status: dbUser.status
+        status: dbUser.status,
+        assignedEmployee
       }
     });
   } catch (err: any) {

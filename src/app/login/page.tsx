@@ -52,7 +52,7 @@ export default function LoginPage() {
       } else {
         loginSession(data.user as any);
         toast.success(`Logged in as ${data.user.name}`);
-        router.push("/dashboard");
+        window.location.href = "/dashboard";
       }
     } catch (err: any) {
       setErrorMsg("An unexpected error occurred during login.");
@@ -65,14 +65,16 @@ export default function LoginPage() {
   const handleQuickLogin = (email: string, pass: string) => {
     setValue("email", email);
     setValue("password", pass);
-    toast.info("Autofilled credentials. Click Sign In.");
+    onSubmit({ email, password: pass, rememberMe: false });
   };
 
   const testCredentials = [
     { label: "Super Admin", email: "superadmin@conquererp.com", pass: "Admin@123", badge: "SUPER_ADMIN" },
-    { label: "Admin", email: "admin@conquererp.com", pass: "Admin@123", badge: "ADMIN" },
-    { label: "Employee", email: "employee@conquererp.com", pass: "Admin@123", badge: "EMPLOYEE" },
-    { label: "Customer", email: "customer@gmail.com", pass: "Admin@123", badge: "CUSTOMER" }
+    { label: "Director of Ops", email: "marcus.sterling@conquererp.com", pass: "Admin@123", badge: "DIRECTOR" },
+    { label: "Logistics Manager", email: "vikram.rao@conquererp.com", pass: "Admin@123", badge: "MANAGER" },
+    { label: "Assistant Manager", email: "ananya.sharma@conquererp.com", pass: "Admin@123", badge: "ASST_MGR" },
+    { label: "Ops Executive", email: "karan.patel@conquererp.com", pass: "Admin@123", badge: "EXECUTIVE" },
+    { label: "Customer (Oracle)", email: "procurement@oracle.com", pass: "Admin@123", badge: "CUSTOMER" },
   ];
 
   const containerVariants = {

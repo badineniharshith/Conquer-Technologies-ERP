@@ -51,6 +51,7 @@ interface SettingsClientProps {
 export default function SettingsClient({ users, roles, branches = [], auditLogs }: SettingsClientProps) {
   const { activeRole, activeUser, theme, toggleTheme, logoutSession } = useErpStore();
   const router = useRouter();
+  const isCustomer = activeRole === "CUSTOMER";
 
   const formatLastLogin = (dateStringOrDate: any) => {
     if (!dateStringOrDate) return "First Login";
@@ -516,17 +517,13 @@ export default function SettingsClient({ users, roles, branches = [], auditLogs 
   };
 
   const menuItems = [
-    { id: "general", label: "General", icon: User },
-    { id: "security", label: "Security", icon: Lock },
-    { id: "notifications", label: "Notifications", icon: Bell },
-    { id: "appearance", label: "Appearance", icon: Sliders },
-
-    ...(activeRole === "SUPER_ADMIN" || activeRole === "ADMIN" ? [
-      { id: "system", label: "System", icon: Server }
-    ] : []),
-    ...(activeRole === "SUPER_ADMIN" ? [
-      { id: "dev_console", label: "Developer Console", icon: Monitor }
-    ] : [])
+    { id: "users", label: "User Management", icon: Users },
+    { id: "roles", label: "Roles & Permissions", icon: ShieldCheck },
+    { id: "branches", label: "Branch Settings", icon: Building },
+    { id: "company", label: "Company Information", icon: Briefcase },
+    { id: "notifications", label: "Notification Settings", icon: Bell },
+    { id: "security", label: "Security & Sessions", icon: Lock },
+    { id: "database", label: "Database Health", icon: Database },
   ];
 
   return (
@@ -567,6 +564,44 @@ export default function SettingsClient({ users, roles, branches = [], auditLogs 
           {/* GENERAL SECTION */}
           {activeTab === "general" && (
             <div className="space-y-6 animate-in fade-in-50 duration-200">
+              {isCustomer && currentUserData && (
+                <div className="glass-panel p-5 bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-200 rounded-2xl shadow-sm space-y-4">
+                  <h3 className="font-bold text-sm text-stone-900 flex items-center space-x-2 border-b border-orange-100 pb-2">
+                    <UserCheck className="w-4 h-4 text-orange-600 animate-pulse" />
+                    <span className="font-outfit">My Assigned Operations Executive</span>
+                  </h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                    <div className="space-y-1.5 bg-white p-4 rounded-xl border border-stone-200/80 shadow-sm">
+                      <div className="text-[10px] text-stone-400 font-bold uppercase tracking-wider mb-1">Customer Profile Info</div>
+                      <div><span className="font-semibold text-stone-500">Customer ID:</span> <span className="font-extrabold text-stone-900 font-mono">{currentUserData.customerId || "—"}</span></div>
+                      <div><span className="font-semibold text-stone-500">Company Name:</span> <span className="font-extrabold text-stone-900">{currentUserData.companyName || currentUserData.name}</span></div>
+                    </div>
+
+                    <div className="space-y-1.5 bg-white p-4 rounded-xl border border-stone-200/80 shadow-sm">
+                      <div className="text-[10px] text-stone-400 font-bold uppercase tracking-wider mb-1 font-outfit">Operations Support Contact</div>
+                      {currentUserData.assignedEmployee ? (
+                        <>
+                          <div><span className="font-semibold text-stone-500">Executive Name:</span> <span className="font-extrabold text-orange-600">{currentUserData.assignedEmployee.name}</span></div>
+                          <div><span className="font-semibold text-stone-500">Employee ID:</span> <span className="font-extrabold text-stone-900 font-mono">{currentUserData.assignedEmployee.employeeId || currentUserData.assignedEmployee.id}</span></div>
+                          <div><span className="font-semibold text-stone-500">Email Address:</span> <span className="font-bold text-stone-900">{currentUserData.assignedEmployee.email}</span></div>
+                          <div><span className="font-semibold text-stone-500">Phone Number:</span> <span className="font-bold text-stone-900 font-mono">{currentUserData.assignedEmployee.phone || "—"}</span></div>
+                          <div><span className="font-semibold text-stone-500">Branch Location:</span> <span className="font-extrabold text-stone-900">{currentUserData.assignedEmployee.branchCode || currentUserData.assignedEmployee.branchName || "—"}</span></div>
+                          <div>
+                            <span className="font-semibold text-stone-500">Reporting Assistant Manager:</span>{" "}
+                            <span className="font-bold text-stone-900">
+                              {currentUserData.assignedEmployee.assistantManager?.name || "None Assigned"}
+                            </span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-stone-450 italic text-[11px] pt-1">No Operations Executive assigned currently. Please contact support.</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Company Info */}
               <div className="glass-panel p-5 bg-white border border-stone-200 rounded-2xl shadow-sm space-y-4">
                 <h3 className="font-bold text-sm text-stone-900 flex items-center space-x-2 border-b pb-2">

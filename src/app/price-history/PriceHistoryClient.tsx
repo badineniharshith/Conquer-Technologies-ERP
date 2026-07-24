@@ -35,6 +35,8 @@ interface PriceHistoryClientProps {
   initialHistory: any[];
   products: any[];
   categories: any[];
+  purchaseOrders?: any[];
+  reservations?: any[];
   searchSku?: string;
   searchCompareSku?: string;
 }
@@ -43,6 +45,8 @@ export default function PriceHistoryClient({
   initialHistory,
   products,
   categories,
+  purchaseOrders = [],
+  reservations = [],
   searchSku,
   searchCompareSku
 }: PriceHistoryClientProps) {
@@ -54,6 +58,8 @@ export default function PriceHistoryClient({
   const [selectedSku, setSelectedSku] = useState(searchSku || products[0]?.sku || "");
   const [compareSku, setCompareSku] = useState(searchCompareSku || products[1]?.sku || "");
   const [dateRange, setDateRange] = useState("All"); // All, 30, 90, 365
+
+  const isCustomer = activeUser?.role === "CUSTOMER";
 
   // Filter products dropdown based on selected Category
   const filteredProducts = products.filter(
@@ -134,7 +140,7 @@ export default function PriceHistoryClient({
   const averagePrice = pricesList.length > 0 ? Math.round(pricesList.reduce((sum, p) => sum + p, 0) / pricesList.length) : 0;
   const latestPrice = filteredHistory[filteredHistory.length - 1]?.sellingPrice || 0;
 
-  // Percentage single-month changes
+  // Percentage changes
   let maxPctIncrease = 0;
   let maxPctDecrease = 0;
   for (let i = 1; i < filteredHistory.length; i++) {
@@ -149,7 +155,7 @@ export default function PriceHistoryClient({
     }
   }
 
-  // --- 1. Price Trend & Volatility Charts Data ---
+  // --- 1. Price Trend Area Chart Data ---
   const chartData = filteredHistory.map((h) => ({
     date: new Date(h.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
     "Selling Price": h.sellingPrice,
@@ -174,7 +180,6 @@ export default function PriceHistoryClient({
   }));
 
   // --- 3. Product Comparison (Multi-Line Chart) Data ---
-  // Match history entries by month
   const selectedProdName = products.find(p => p.sku === selectedSku)?.name.substring(0, 12) || selectedSku;
   const compareProdName = products.find(p => p.sku === compareSku)?.name.substring(0, 12) || compareSku;
 
@@ -196,7 +201,6 @@ export default function PriceHistoryClient({
     const diff = newPrice - oldPrice;
     const diffPct = oldPrice > 0 ? Math.round((diff / oldPrice) * 1000) / 10 : 0;
     
-    // Fallback reasons if not present
     const reasonsPool = ["Supplier Cost Increase", "Promotional Discount", "GST Revision", "Market Competition", "Festival Offer", "Import Cost", "Currency Fluctuation"];
     const reason = record.reason || reasonsPool[index % reasonsPool.length];
 
@@ -211,8 +215,233 @@ export default function PriceHistoryClient({
     };
   }).reverse(); // Latest updates first
 
-  const selectedProduct = products.find((p) => p.sku === selectedSku);
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "ACTIVE":
+      case "PENDING":
+      case "Pending Verification":
+        return "bg-amber-50 text-amber-700 border-amber-250 font-bold";
+      case "Draft":
+        return "bg-stone-50 text-stone-500 border-stone-300 font-bold";
+      case "Verified":
+        return "bg-indigo-50 text-indigo-700 border-indigo-200 font-bold";
+      case "Pending Customer Approval":
+        return "bg-indigo-50 text-indigo-750 border-indigo-250 font-bold";
+      case "Modified by Customer (Pending Verification)":
+        return "bg-purple-50 text-purple-700 border-purple-200 font-bold";
+      case "ACCEPTED":
+      case "Accepted":
+        return "bg-emerald-50 text-emerald-700 border-emerald-250 font-extrabold";
+      case "Processing":
+        return "bg-blue-50 text-blue-700 border-blue-205 font-bold animate-pulse";
+      case "REJECTED":
+        return "bg-rose-50 text-rose-700 border-rose-200 font-extrabold";
+      case "EXPIRED":
+        return "bg-red-50 text-red-750 border-red-200 font-semibold";
+      case "COMPLETED":
+      case "Completed":
+        return "bg-emerald-100 text-emerald-800 border-emerald-350 font-semibold";
+      case "CANCELLED":
+      case "Cancelled":
+        return "bg-stone-100 text-stone-500 border-stone-300 font-semibold";
+      default:
+        return "bg-stone-50 text-stone-750 border-stone-200";
+    }
+  };
 
+  // CUSTOMER VIEW RENDERING
+  if (isCustomer) {
+    const myPOs = (purchaseOrders || []).filter(po => po.customerId === activeUser?.id);
+    const myReservations = (reservations || []).filter(res => res.customerId === activeUser?.id);
+    const activeResCount = myReservations.filter(r => 
+      ["ACTIVE", "PENDING", "ACCEPTED", "Accepted", "Verified", "Processing", "Pending Verification", "Modified by Customer (Pending Verification)", "Pending Customer Approval", "Draft"].includes(r.status)
+    ).length;
+    const totalItemsPurchased = myPOs.reduce((sum, po) => sum + (po.totalItems || 0), 0);
+    const lastPurchaseDate = myPOs.length > 0 
+      ? new Date(Math.max(...myPOs.map(po => new Date(po.dateReceived).getTime()))).toLocaleDateString() 
+      : "N/A";
+
+    return (
+      <div className="space-y-6 text-stone-850">
+        {/* Header */}
+        <div className="glass-panel p-6 bg-gradient-to-r from-orange-500/10 to-orange-650/5 border border-orange-200 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h1 className="text-xl font-bold tracking-tight text-stone-900 font-outfit">My Price History & Purchase Logs</h1>
+            <p className="text-stone-500 text-xs md:text-sm mt-1">
+              Review your purchase history, price trends, PO logs, and active stock reservations.
+            </p>
+          </div>
+          <div className="flex items-center space-x-2 bg-orange-50 border border-orange-100 px-3 py-1.5 rounded-lg text-orange-600 font-semibold text-xs shrink-0">
+            <TrendingUp className="w-4 h-4" />
+            <span>Customer Portal</span>
+          </div>
+        </div>
+
+        {/* Personalized KPIs */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[
+            { label: "POs Placed", value: myPOs.length, color: "text-orange-600 bg-orange-50" },
+            { label: "Active Reservations", value: activeResCount, color: "text-indigo-655 bg-indigo-50" },
+            { label: "Items Purchased", value: totalItemsPurchased, color: "text-emerald-700 bg-emerald-50" },
+            { label: "Last Order Date", value: lastPurchaseDate, color: "text-stone-700 bg-stone-50" }
+          ].map((kpi, idx) => (
+            <div key={idx} className="bg-white p-4 border border-stone-200 rounded-2xl shadow-sm space-y-1 transition-all hover:shadow">
+              <span className="text-[10px] text-stone-400 block font-bold uppercase tracking-wider">{kpi.label}</span>
+              <span className={`text-base font-black block ${kpi.color.split(" ")[0]}`}>{kpi.value}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* PRODUCT PRICE TREND SELECTOR & CHART */}
+        <div className="glass-panel p-5 bg-white border border-stone-200 rounded-2xl shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-stone-700 flex items-center gap-1.5">
+              <TrendingUp className="w-4 h-4 text-orange-500" />
+              <span>Catalog Price Trends</span>
+            </h3>
+            <select
+              value={selectedSku}
+              onChange={(e) => handleSkuChange(e.target.value)}
+              className="bg-stone-50 border border-stone-200 rounded-lg px-3 py-1.5 text-xs text-stone-755 outline-none cursor-pointer focus:border-orange-500 focus:bg-white transition-all font-medium min-w-[200px]"
+            >
+              {products.map((p) => (
+                <option key={p.sku} value={p.sku}>{p.name} ({p.sku})</option>
+              ))}
+            </select>
+          </div>
+          <div className="h-60 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(120,113,108,0.1)" />
+                <XAxis dataKey="date" stroke="#78716c" fontSize={10} />
+                <YAxis stroke="#78716c" fontSize={10} />
+                <Tooltip formatter={(v) => `₹${Number(v).toLocaleString()}`} />
+                <Legend />
+                <Area type="monotone" dataKey="Selling Price" stroke="#ea580c" fill="#ffedd5" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* MY PURCHASE HISTORY TABLE */}
+        <div className="glass-panel p-5 bg-white border border-stone-200 rounded-2xl shadow-sm space-y-4">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-stone-700 flex items-center gap-1.5">
+            <Table className="w-4 h-4 text-orange-500" />
+            <span>My Purchase Orders History</span>
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left border-collapse">
+              <thead>
+                <tr className="bg-stone-50 border-b border-stone-200 text-stone-500 font-semibold uppercase tracking-wider">
+                  <th className="px-4 py-3">PO Number</th>
+                  <th className="px-4 py-3">Products & Quantities</th>
+                  <th className="px-4 py-3">Expected Delivery</th>
+                  <th className="px-4 py-3 text-right">Total Items</th>
+                  <th className="px-4 py-3">Date Received</th>
+                  <th className="px-4 py-3">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-stone-100">
+                {myPOs.map((po) => {
+                  let productsList = "—";
+                  try {
+                    const parsed = JSON.parse(po.itemsJson || "[]");
+                    productsList = parsed.map((it: any) => `${it.sku} (x${it.quantity})`).join(", ");
+                  } catch {}
+                  return (
+                    <tr key={po.id} className="hover:bg-stone-50/50 transition-colors">
+                      <td className="px-4 py-3 font-mono font-bold text-orange-600">{po.poNumber}</td>
+                      <td className="px-4 py-3 font-semibold text-stone-850">{productsList}</td>
+                      <td className="px-4 py-3 text-stone-500 font-medium">
+                        {po.expectedDelivery ? new Date(po.expectedDelivery).toLocaleDateString() : "N/A"}
+                      </td>
+                      <td className="px-4 py-3 text-right text-stone-800 font-bold">{po.totalItems} units</td>
+                      <td className="px-4 py-3 text-stone-500 font-medium">
+                        {new Date(po.dateReceived).toLocaleDateString()}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-block text-[9px] font-bold px-2 py-0.5 rounded-full border uppercase ${
+                          po.verificationStatus === "Verified" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"
+                        }`}>
+                          {po.verificationStatus}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {myPOs.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-6 text-center text-stone-400 italic">
+                      You have not placed any purchase orders yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* MY RESERVATION LOGS TABLE */}
+        <div className="glass-panel p-5 bg-white border border-stone-200 rounded-2xl shadow-sm space-y-4">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-stone-700 flex items-center gap-1.5">
+            <Table className="w-4 h-4 text-orange-500" />
+            <span>My Stock Reservation Logs</span>
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left border-collapse">
+              <thead>
+                <tr className="bg-stone-50 border-b border-stone-200 text-stone-500 font-semibold uppercase tracking-wider">
+                  <th className="px-4 py-3">Reservation Number</th>
+                  <th className="px-4 py-3">Reserved Products</th>
+                  <th className="px-4 py-3">Reserved On</th>
+                  <th className="px-4 py-3">Expires On</th>
+                  <th className="px-4 py-3 text-right">Quantity</th>
+                  <th className="px-4 py-3">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-stone-100">
+                {myReservations.map((res) => (
+                  <tr key={res.id} className="hover:bg-stone-50/50 transition-colors">
+                    <td className="px-4 py-3 font-mono font-bold text-orange-600">{res.reservationNumber}</td>
+                    <td className="px-4 py-3 font-semibold text-stone-850">
+                      {res.items && res.items.length > 0 
+                        ? res.items.map((it: any) => it.product?.name || it.sku).join(", ") 
+                        : (res.product?.name || res.sku)}
+                    </td>
+                    <td className="px-4 py-3 text-stone-500 font-medium">
+                      {new Date(res.reservedAt).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-3 text-stone-500 font-medium">
+                      {new Date(res.expiresAt).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-3 text-right text-stone-800 font-bold">
+                      {res.items && res.items.length > 0 
+                        ? `${res.items.reduce((sum: number, it: any) => sum + it.quantity, 0)} units` 
+                        : `${res.quantity} units`}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-block text-[9px] font-bold px-2 py-0.5 rounded-full border uppercase ${getStatusBadge(res.status)}`}>
+                        {res.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {myReservations.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-6 text-center text-stone-400 italic">
+                      You have no stock reservation logs.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // STAFF VIEW RENDERING
   return (
     <div className="space-y-6 text-stone-850">
       {/* Fallback Demo Data Alert Badge */}
@@ -224,7 +453,7 @@ export default function PriceHistoryClient({
       )}
 
       {/* Header */}
-      <div className="glass-panel p-6 bg-gradient-to-r from-orange-500/10 to-orange-650/5 border border-orange-200 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="glass-panel p-6 bg-gradient-to-r from-orange-500/10 to-orange-655/5 border border-orange-200 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-stone-900 font-outfit">Price History Tracker</h1>
           <p className="text-stone-500 text-xs md:text-sm mt-1">
@@ -283,7 +512,7 @@ export default function PriceHistoryClient({
             <select
               value={compareSku}
               onChange={(e) => handleCompareSkuChange(e.target.value)}
-              className="w-full bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 text-xs text-stone-750 outline-none cursor-pointer focus:border-orange-500 focus:bg-white transition-all font-medium"
+              className="w-full bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 text-xs text-stone-755 outline-none cursor-pointer focus:border-orange-500 focus:bg-white transition-all font-medium"
             >
               {products.filter(p => p.sku !== selectedSku).map((p) => (
                 <option key={p.sku} value={p.sku}>{p.name} ({p.sku})</option>

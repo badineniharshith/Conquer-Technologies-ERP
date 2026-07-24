@@ -12,7 +12,7 @@ async function main() {
   
   let content = "=== USER CREDENTIALS AND LOGIN INFORMATION ===\n\n";
   content += `Total Users: ${users.length}\n`;
-  content += "Note: All standard accounts use 'Admin@2026' or 'Customer#2026' as their password, unless specified otherwise.\n\n";
+  content += "Note: All standard accounts use 'Admin@123' as their password, unless specified otherwise.\n\n";
   content += "----------------------------------------------------------------------------------------------------\n";
   content += String("NAME").padEnd(30) + " | " + String("EMAIL").padEnd(35) + " | " + String("ROLE").padEnd(15) + " | " + String("BRANCH").padEnd(20) + "\n";
   content += "----------------------------------------------------------------------------------------------------\n";

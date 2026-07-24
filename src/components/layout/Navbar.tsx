@@ -142,6 +142,16 @@ export default function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
 
       {/* Action Controls */}
       <div className="flex items-center space-x-2 sm:space-x-3 ml-4">
+        {/* Visit CRM Button */}
+        <a
+          href="https://conquer-crm.onrender.com/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="hidden md:inline-flex items-center space-x-1.5 px-3 py-1.5 bg-[#8c3120] text-white text-xs font-bold rounded-xl shadow-sm hover:bg-[#6c2417] transition-all"
+        >
+          <span>Visit CRM</span>
+        </a>
+
         {/* Notifications Center */}
         <div className="relative" ref={notiRef}>
           <motion.button

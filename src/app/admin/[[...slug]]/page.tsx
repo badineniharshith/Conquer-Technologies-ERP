@@ -20,8 +20,9 @@ export default async function AdminCatchAllPage({ params }: PageProps) {
   }
 
   const payload = await verifyJwt(token);
-  if (!payload || !["SUPER_ADMIN", "ADMIN"].includes(payload.role)) {
-    redirect("/403");
+  const allowedAdminRoles = ["SUPER_ADMIN", "ADMIN", "DIRECTOR_OPERATIONS", "OPERATIONS_MANAGER", "ASSISTANT_MANAGER", "OPERATIONS_EXECUTIVE"];
+  if (!payload || !allowedAdminRoles.includes(payload.role)) {
+    redirect("/dashboard");
   }
 
   // 2. Resolve parameters promise

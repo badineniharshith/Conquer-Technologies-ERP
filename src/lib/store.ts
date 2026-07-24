@@ -2,30 +2,39 @@ import { create } from "zustand";
 
 export type UserRole =
   | "SUPER_ADMIN"
+  | "DIRECTOR_OPERATIONS"
+  | "OPERATIONS_MANAGER"
+  | "ASSISTANT_MANAGER"
+  | "OPERATIONS_EXECUTIVE"
+  | "CUSTOMER"
   | "ADMIN"
   | "EMPLOYEE"
-  | "CUSTOMER"
   | "SALES_HEAD"
   | "REGIONAL_SALES_MANAGER"
   | "BRANCH_MANAGER"
   | "SALES_MANAGER"
   | "SALES_EXECUTIVE"
-  | "REGIONAL_OFFICER"
-  | "BRANCH_USER"
   | "VIEWER"
-  | "REGIONAL_MANAGER"
-  | "INVENTORY_MANAGER"
-  | "PURCHASE_MANAGER"
-  | "LOGISTICS_MANAGER"
-  | "ACCOUNTS_MANAGER";
+  | "BRANCH_USER";
 
 export interface UserDetails {
   id: string;
+  customerId?: string | null;
   name: string;
+  companyName?: string | null;
   email: string;
   role: UserRole;
   branch: string;
   status: string; // ACTIVE, PENDING, REJECTED
+  assignedEmployee?: {
+    id: string;
+    employeeId?: string | null;
+    name: string;
+    email: string;
+    phone: string | null;
+    branch?: string;
+    reportsToName?: string | null;
+  } | null;
 }
 
 interface ErpStore {

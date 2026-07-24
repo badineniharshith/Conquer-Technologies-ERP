@@ -36,16 +36,29 @@ export async function authenticateUserAction(email: string, passwordPlain: strin
   if (!user) {
     return { error: "Invalid credentials. User account does not exist." };
   }
-  
-  if (passwordPlain !== "Admin@123") {
+
+  // Check password with bcrypt or fallback default passwords
+  let isValid = false;
+  if (user.passwordHash) {
+    try {
+      isValid = await bcrypt.compare(passwordPlain, user.passwordHash);
+    } catch (e) {
+      isValid = false;
+    }
+  }
+  if (!isValid && passwordPlain === "Admin@123") {
+    isValid = true;
+  }
+
+  if (!isValid) {
     return { error: "Invalid credentials. Password incorrect." };
   }
   
   if (user.status === "PENDING") {
-    return { error: "Account registration is PENDING Admin approval." };
+    return { error: "Account registration is PENDING approval." };
   }
-  if (user.status === "REJECTED") {
-    return { error: "Account registration has been REJECTED by Admin." };
+  if (user.status === "REJECTED" || user.status === "DISABLED" || user.isActive === false) {
+    return { error: "Account is inactive or disabled. Contact Super Admin." };
   }
 
   // Update lastLogin tracking in a single database transaction if not mock, or simple update in mock mode
@@ -895,112 +908,275 @@ async function notifyAdmins(title: string, message: string) {
   }
 }
 
-// 10. Customer Stock Reservations Actions
+async function getReportingHierarchyRecipients(employeeId: string | null): Promise<string[]> {
+  const recipients: string[] = [];
+  if (!employeeId) return recipients;
+
+  let currentUserId = employeeId;
+  for (let i = 0; i < 5; i++) {
+    const user = await erpDb.users.findUnique({
+      where: { id: currentUserId }
+    });
+    if (!user) break;
+    if (!recipients.includes(user.id)) {
+      recipients.push(user.id);
+    }
+    if (user.reportsToId) {
+      currentUserId = user.reportsToId;
+    } else {
+      break;
+    }
+  }
+
+  // Also include all SUPER_ADMINs as a fallback
+  const superAdmins = await erpDb.users.findMany({
+    where: { roleId: "SUPER_ADMIN" },
+    select: { id: true }
+  });
+  for (const sa of superAdmins) {
+    if (!recipients.includes(sa.id)) {
+      recipients.push(sa.id);
+    }
+  }
+
+  return recipients;
+}
+
+export async function notifyReservationEvent(reservationId: string, title: string, message: string) {
+  try {
+    const reservation = await erpDb.stockReservations.findUnique({
+      where: { id: reservationId }
+    });
+    if (!reservation) return;
+
+    // 1. Notify customer
+    await createNotification(reservation.customerId, title, message);
+
+    // 2. Notify staff hierarchy
+    const staffIds = await getReportingHierarchyRecipients(reservation.employeeId);
+    for (const sId of staffIds) {
+      await createNotification(sId, title, message);
+    }
+  } catch (err) {
+    console.error("Failed to notify reservation event:", err);
+  }
+}
+
+export async function syncReservationToOpportunity(reservationId: string) {
+  try {
+    const reservation = await erpDb.stockReservations.findUnique({
+      where: { id: reservationId }
+    });
+    if (!reservation) return;
+
+    const user = await erpDb.users.findUnique({ where: { id: reservation.customerId } });
+    const employee = reservation.employeeId ? await erpDb.users.findUnique({ where: { id: reservation.employeeId } }) : null;
+    
+    const items = await erpDb.stockReservationItems.findMany({ where: { reservationId: reservation.id } });
+    const productDetailList = items.map((item: any) => ({ sku: item.sku, productId: item.productId, quantity: item.quantity }));
+    const totalQuantity = items.reduce((sum: number, item: any) => sum + item.quantity, 0);
+    const productNames = items.map((item: any) => item.sku).join(", ");
+
+    const opps = await erpDb.opportunities.findMany();
+    let opp = opps.find((o: any) => o.reservationId === reservation.id);
+
+    const oppNumber = opp?.opportunityNumber || ("OPP-" + Math.floor(100000 + Math.random() * 900000));
+    
+    const data = {
+      opportunityNumber: oppNumber,
+      customerId: reservation.customerId,
+      customerName: user?.name || "Customer",
+      companyName: user?.companyName || user?.name || "Customer",
+      productDetails: JSON.stringify(productDetailList),
+      totalQuantity: totalQuantity || reservation.quantity || 0,
+      reservationDate: reservation.reservedAt,
+      expiryDate: reservation.expiresAt,
+      notes: reservation.notes,
+      reservationId: reservation.id,
+      product: productNames || reservation.sku || "Products",
+      requestedDeliveryDate: reservation.expiresAt,
+      reservationStatus: reservation.status,
+      assignedExecutive: employee?.name || null,
+      branch: reservation.branchCode,
+      status: ["COMPLETED", "Completed"].includes(reservation.status) ? "WON" : ["CANCELLED", "EXPIRED", "Cancelled", "Expired"].includes(reservation.status) ? "LOST" : "OPEN"
+    };
+
+    if (opp) {
+      await erpDb.opportunities.update({
+        where: { id: opp.id },
+        data
+      });
+    } else {
+      await erpDb.opportunities.create({
+        data
+      });
+    }
+  } catch (err: any) {
+    console.error("Opportunity Sync Error:", err.message);
+  }
+}
+
 export async function createReservationAction(data: {
-  productId: string;
-  sku: string;
-  quantity: number;
+  productId?: string;
+  sku?: string;
+  quantity?: number;
+  items?: Array<{ productId: string; quantity: number }>;
   customerId: string;
   branchCode: string;
   employeeId?: string;
   notes?: string;
+  deadlineDays?: number;
+  status?: string;
 }) {
-  const product = await erpDb.products.findUnique({ where: { id: data.productId } });
-  if (!product) {
-    return { error: "Product not found in catalog." };
+  const items = data.items || [];
+  if (items.length === 0 && data.productId && data.quantity) {
+    items.push({ productId: data.productId, quantity: data.quantity });
+  }
+  if (items.length === 0) {
+    return { error: "No products selected for reservation." };
+  }
+
+  const productIds = items.map(it => it.productId);
+  if (new Set(productIds).size !== productIds.length) {
+    return { error: "Duplicate products are not allowed in the same reservation request." };
+  }
+
+  const customerUser = await erpDb.users.findUnique({ where: { id: data.customerId } });
+  if (!customerUser) {
+    return { error: "Customer not found." };
+  }
+
+  let assignedEmployeeId = data.employeeId || null;
+  if (customerUser) {
+    assignedEmployeeId = customerUser.reportsToId || customerUser.assignedEmployeeId || assignedEmployeeId;
   }
 
   const allInv = await erpDb.inventory.findMany();
-  const invItem = allInv.find((i: any) => i.sku === data.sku && i.branchCode === data.branchCode);
-  if (!invItem) {
-    return { error: `Product with SKU ${data.sku} is not stocked in branch ${data.branchCode}.` };
-  }
+  let maxShortageDays = 3;
+  
+  const processedItems = [];
 
-  const freeStock = invItem.quantity - invItem.reservedQty;
-  if (freeStock < data.quantity) {
-    return { error: `Insufficient stock available in branch ${data.branchCode}. Available: ${freeStock}, Requested: ${data.quantity}` };
-  }
-
-  // Prevent duplicate active (PENDING, ACCEPTED, ACTIVE, Pending Customer Approval, Modified by Customer) reservations for the same customer/product
-  const activeReservations = await erpDb.stockReservations.findMany({
-    where: {
-      customerId: data.customerId,
-      productId: data.productId,
-      status: { in: ["PENDING", "ACCEPTED", "ACTIVE", "Pending Customer Approval", "Modified by Customer (Pending Verification)"] }
+  for (const item of items) {
+    const product = await erpDb.products.findUnique({ where: { id: item.productId } });
+    if (!product) {
+      return { error: `Product not found for ID ${item.productId}.` };
     }
-  });
-  if (activeReservations.length > 0) {
-    return { error: "An active stock reservation already exists for this customer and product." };
+
+    const invItem = allInv.find((i: any) => i.sku === product.sku && i.branchCode === data.branchCode);
+    const freeStock = invItem ? Math.max(0, invItem.quantity - invItem.reservedQty) : 0;
+    
+    let itemDays = 3;
+    if (freeStock >= item.quantity) {
+      itemDays = 3;
+    } else if (freeStock > 0) {
+      itemDays = 7;
+    } else {
+      itemDays = 14;
+    }
+    if (itemDays > maxShortageDays) {
+      maxShortageDays = itemDays;
+    }
+
+    processedItems.push({
+      productId: item.productId,
+      sku: product.sku,
+      quantity: item.quantity,
+      freeStock,
+      invItem,
+      product
+    });
+  }
+
+  const isCreatedByStaff = !!data.employeeId;
+  let days = maxShortageDays;
+  if (isCreatedByStaff) {
+    days = Math.min(Math.max(data.deadlineDays || 14, 1), 14);
   }
 
   const reservedAt = new Date();
-  const expiresAt = new Date(reservedAt.getTime() + 14 * 24 * 60 * 60 * 1000); // 14 days
+  const expiresAt = new Date(reservedAt.getTime() + days * 24 * 60 * 60 * 1000);
   const reservationNumber = "SR-" + Math.floor(100000 + Math.random() * 900000);
+  const initialStatus = data.status === "Draft" ? "Draft" : "Pending Verification";
 
-  const isCreatedByStaff = !!data.employeeId;
-  const initialStatus = isCreatedByStaff ? "Pending Customer Approval" : "PENDING";
-
+  const firstItem = processedItems[0];
   const reservation = await erpDb.stockReservations.create({
     data: {
       reservationNumber,
       customerId: data.customerId,
-      productId: data.productId,
-      sku: data.sku,
+      productId: firstItem.productId,
+      sku: firstItem.sku,
       branchCode: data.branchCode,
-      quantity: data.quantity,
+      quantity: firstItem.quantity,
       status: initialStatus,
-      notes: data.notes || null,
-      employeeId: data.employeeId || null,
+      notes: data.notes || "",
+      employeeId: assignedEmployeeId,
       reservedAt,
-      expiresAt
+      expiresAt,
+      draftedAt: initialStatus === "Draft" ? reservedAt : null
     }
   });
 
-  const updatedReserved = invItem.reservedQty + data.quantity;
-  const updatedAllocated = invItem.allocatedQty || 0;
-  await erpDb.inventory.update({
-    where: { id: invItem.id },
-    data: {
-      reservedQty: updatedReserved,
-      availableQty: invItem.quantity - updatedReserved - updatedAllocated,
-      reservedStock: updatedReserved,
-      availableStock: invItem.quantity - updatedReserved - updatedAllocated
-    }
-  });
+  for (const item of processedItems) {
+    const lockQty = Math.min(item.quantity, item.freeStock);
+    const shortageQty = item.quantity - lockQty;
+    const itemStatus = shortageQty > 0 ? "Pending Procurement" : "Reserved";
 
-  await erpDb.inventoryMovements.create({
-    data: {
-      sku: data.sku,
-      branchCode: data.branchCode,
-      type: "ADJUSTMENT",
-      quantity: 0,
-      details: `Reserved ${data.quantity} units of SKU ${data.sku} at ${data.branchCode} for customer. Reservation: ${reservationNumber}.`,
-      userId: data.employeeId || data.customerId
-    }
-  });
+    await erpDb.stockReservationItems.create({
+      data: {
+        reservationId: reservation.id,
+        productId: item.productId,
+        sku: item.sku,
+        quantity: item.quantity,
+        status: itemStatus,
+        reservedQty: lockQty,
+        shortageQty
+      }
+    });
 
-  // Cross-user notifications
-  const customer = await erpDb.users.findUnique({ where: { id: data.customerId } });
-  const customerName = customer?.name || "Customer";
-  
+    if (lockQty > 0 && item.invItem) {
+      const updatedReserved = item.invItem.reservedQty + lockQty;
+      const updatedAllocated = item.invItem.allocatedQty || 0;
+      await erpDb.inventory.update({
+        where: { id: item.invItem.id },
+        data: {
+          reservedQty: updatedReserved,
+          availableQty: Math.max(0, item.invItem.quantity - updatedReserved - updatedAllocated),
+          reservedStock: updatedReserved,
+          availableStock: Math.max(0, item.invItem.quantity - updatedReserved - updatedAllocated)
+        }
+      });
+
+      const performedBy = await getCurrentUserId();
+      await erpDb.inventoryMovements.create({
+        data: {
+          sku: item.sku,
+          branchCode: data.branchCode,
+          type: "RESERVATION",
+          quantity: lockQty,
+          details: `Reserved stock for SKU ${item.sku} under reservation ${reservationNumber}`,
+          userId: performedBy
+        }
+      });
+    }
+  }
+
+  await syncReservationToOpportunity(reservation.id);
+
   let employeeName = "System";
   if (data.employeeId) {
     const employee = await erpDb.users.findUnique({ where: { id: data.employeeId } });
     employeeName = employee?.name || "Employee";
   }
 
-  // Notify customer
-  await createNotification(data.customerId, "New Stock Locked", `Employee ${employeeName} created a new stock reservation ${reservationNumber} for you.`);
-  
-  // Notify admins
-  await notifyAdmins("Reservation Created", `Employee ${employeeName} created a new reservation ${reservationNumber} for customer ${customerName}.`);
+  await notifyReservationEvent(
+    reservation.id,
+    initialStatus === "Draft" ? "Reservation Draft Created" : "Reservation Pending Verification",
+    `Reservation ${reservationNumber} for customer ${customerUser?.name || "Customer"} has been created by ${employeeName} (Status: ${initialStatus}).`
+  );
 
   const performedBy = await getCurrentUserId();
   auditLog("RESERVATION_CREATE", performedBy, data.customerId, {
     reservationId: reservation.id,
-    sku: data.sku,
-    quantity: data.quantity,
-    branchCode: data.branchCode,
     status: initialStatus
   });
 
@@ -1018,57 +1194,59 @@ export async function acceptReservationAction(reservationId: string, customerId:
   if (reservation.customerId !== customerId) {
     return { error: "Unauthorized: You can only accept your own reservations." };
   }
-  if (reservation.status !== "PENDING" && reservation.status !== "Pending Customer Approval") {
-    return { error: `Reservation is not in a confirmable state. Current status: ${reservation.status}` };
+  if (!["Verified", "VERIFIED"].includes(reservation.status)) {
+    return { error: `Reservation is not verified yet. Current status: ${reservation.status}` };
   }
 
-  // Update status to ACCEPTED
   await erpDb.stockReservations.update({
     where: { id: reservationId },
     data: {
-      status: "ACCEPTED",
+      status: "Accepted",
       acceptedAt: new Date()
     }
   });
 
-  // Move reserved stock to allocated stock
+  const items = await erpDb.stockReservationItems.findMany({ where: { reservationId } });
   const allInv = await erpDb.inventory.findMany();
-  const invItem = allInv.find((i: any) => i.sku === reservation.sku && i.branchCode === reservation.branchCode);
-  if (invItem) {
-    const updatedReserved = Math.max(0, invItem.reservedQty - reservation.quantity);
-    const updatedAllocated = (invItem.allocatedQty || 0) + reservation.quantity;
-    await erpDb.inventory.update({
-      where: { id: invItem.id },
-      data: {
-        reservedQty: updatedReserved,
-        allocatedQty: updatedAllocated,
-        reservedStock: updatedReserved,
-        allocatedStock: updatedAllocated,
-        availableQty: invItem.quantity - updatedReserved - updatedAllocated,
-        availableStock: invItem.quantity - updatedReserved - updatedAllocated
-      }
-    });
-  }
 
-  // Create movement audit trail
-  await erpDb.inventoryMovements.create({
-    data: {
-      sku: reservation.sku,
-      branchCode: reservation.branchCode,
-      type: "ADJUSTMENT",
-      quantity: 0,
-      details: `Customer accepted reservation ${reservation.reservationNumber}. Stock converted from reserved to allocated.`,
-      userId: customerId
+  for (const item of items) {
+    const invItem = allInv.find((i: any) => i.sku === item.sku && i.branchCode === reservation.branchCode);
+    if (invItem && item.reservedQty > 0) {
+      const updatedReserved = Math.max(0, invItem.reservedQty - item.reservedQty);
+      const updatedAllocated = (invItem.allocatedQty || 0) + item.reservedQty;
+      await erpDb.inventory.update({
+        where: { id: invItem.id },
+        data: {
+          reservedQty: updatedReserved,
+          allocatedQty: updatedAllocated,
+          reservedStock: updatedReserved,
+          allocatedStock: updatedAllocated,
+          availableQty: invItem.quantity - updatedReserved - updatedAllocated,
+          availableStock: invItem.quantity - updatedReserved - updatedAllocated
+        }
+      });
+
+      await erpDb.inventoryMovements.create({
+        data: {
+          sku: item.sku,
+          branchCode: reservation.branchCode,
+          type: "ADJUSTMENT",
+          quantity: 0,
+          details: `Customer accepted reservation. SKU ${item.sku} converted from reserved to allocated.`,
+          userId: customerId
+        }
+      });
     }
-  });
-
-  // Notifications
-  const customerName = reservation.user?.name || "Customer";
-  const employeeId = reservation.employeeId;
-  if (employeeId) {
-    await createNotification(employeeId, "Reservation Accepted", `Customer ${customerName} has accepted reservation ${reservation.reservationNumber}.`);
   }
-  await notifyAdmins("Reservation Accepted", `Customer ${customerName} has accepted reservation ${reservation.reservationNumber} created by employee.`);
+
+  await syncReservationToOpportunity(reservationId);
+
+  const customerName = reservation.user?.name || "Customer";
+  await notifyReservationEvent(
+    reservationId,
+    "Reservation Accepted",
+    `Customer ${customerName} has accepted reservation ${reservation.reservationNumber}.`
+  );
 
   const performedBy = await getCurrentUserId();
   auditLog("RESERVATION_ACCEPT", performedBy, customerId, { reservationId });
@@ -1087,55 +1265,57 @@ export async function rejectReservationAction(reservationId: string, customerId:
   if (reservation.customerId !== customerId) {
     return { error: "Unauthorized: You can only reject your own reservations." };
   }
-  if (reservation.status !== "PENDING" && reservation.status !== "Pending Customer Approval") {
+  if (!["Pending Verification", "Verified", "Draft", "PENDING", "Pending Customer Approval"].includes(reservation.status)) {
     return { error: `Reservation is not in a rejectable state. Current status: ${reservation.status}` };
   }
 
-  // Update status to REJECTED
   await erpDb.stockReservations.update({
     where: { id: reservationId },
     data: {
-      status: "REJECTED",
-      rejectedAt: new Date()
+      status: "Cancelled",
+      cancelledAt: new Date()
     }
   });
 
-  // Release reserved stock back to available stock
+  const items = await erpDb.stockReservationItems.findMany({ where: { reservationId } });
   const allInv = await erpDb.inventory.findMany();
-  const invItem = allInv.find((i: any) => i.sku === reservation.sku && i.branchCode === reservation.branchCode);
-  if (invItem) {
-    const updatedReserved = Math.max(0, invItem.reservedQty - reservation.quantity);
-    const updatedAllocated = invItem.allocatedQty || 0;
-    await erpDb.inventory.update({
-      where: { id: invItem.id },
-      data: {
-        reservedQty: updatedReserved,
-        reservedStock: updatedReserved,
-        availableQty: invItem.quantity - updatedReserved - updatedAllocated,
-        availableStock: invItem.quantity - updatedReserved - updatedAllocated
-      }
-    });
-  }
 
-  // Create movement audit trail
-  await erpDb.inventoryMovements.create({
-    data: {
-      sku: reservation.sku,
-      branchCode: reservation.branchCode,
-      type: "ADJUSTMENT",
-      quantity: 0,
-      details: `Customer rejected reservation ${reservation.reservationNumber}. Released ${reservation.quantity} units back to available stock.`,
-      userId: customerId
+  for (const item of items) {
+    const invItem = allInv.find((i: any) => i.sku === item.sku && i.branchCode === reservation.branchCode);
+    if (invItem && item.reservedQty > 0) {
+      const updatedReserved = Math.max(0, invItem.reservedQty - item.reservedQty);
+      const updatedAllocated = invItem.allocatedQty || 0;
+      await erpDb.inventory.update({
+        where: { id: invItem.id },
+        data: {
+          reservedQty: updatedReserved,
+          reservedStock: updatedReserved,
+          availableQty: invItem.quantity - updatedReserved - updatedAllocated,
+          availableStock: invItem.quantity - updatedReserved - updatedAllocated
+        }
+      });
+
+      await erpDb.inventoryMovements.create({
+        data: {
+          sku: item.sku,
+          branchCode: reservation.branchCode,
+          type: "ADJUSTMENT",
+          quantity: 0,
+          details: `Customer rejected reservation. Released ${item.reservedQty} units back to available stock for SKU ${item.sku}.`,
+          userId: customerId
+        }
+      });
     }
-  });
-
-  // Notifications
-  const customerName = reservation.user?.name || "Customer";
-  const employeeId = reservation.employeeId;
-  if (employeeId) {
-    await createNotification(employeeId, "Reservation Rejected", `Customer ${customerName} has rejected reservation ${reservation.reservationNumber}.`);
   }
-  await notifyAdmins("Reservation Rejected", `Customer ${customerName} has rejected reservation ${reservation.reservationNumber} created by employee.`);
+
+  await syncReservationToOpportunity(reservationId);
+
+  const customerName = reservation.user?.name || "Customer";
+  await notifyReservationEvent(
+    reservationId,
+    "Reservation Rejected",
+    `Customer ${customerName} has rejected reservation ${reservation.reservationNumber}.`
+  );
 
   const performedBy = await getCurrentUserId();
   auditLog("RESERVATION_REJECT", performedBy, customerId, { reservationId });
@@ -1146,72 +1326,81 @@ export async function rejectReservationAction(reservationId: string, customerId:
   return { success: true };
 }
 
+
 export async function purchaseReservedStockAction(reservationId: string) {
   const reservation = await erpDb.stockReservations.findUnique({ where: { id: reservationId } });
   if (!reservation) {
     return { error: "Reservation record not found." };
   }
 
-  if (reservation.status !== "ACTIVE" && reservation.status !== "PENDING" && reservation.status !== "ACCEPTED") {
+  if (!["ACTIVE", "PENDING", "ACCEPTED", "Accepted", "Verified", "Processing"].includes(reservation.status)) {
     return { error: `Reservation is no longer active. Current status: ${reservation.status}` };
   }
 
+  const isAlreadyAllocated = ["ACCEPTED", "Accepted", "Processing"].includes(reservation.status);
+  const items = await erpDb.stockReservationItems.findMany({ where: { reservationId } });
   const allInv = await erpDb.inventory.findMany();
-  const invItem = allInv.find((i: any) => i.sku === reservation.sku && i.branchCode === reservation.branchCode);
-  if (!invItem) {
-    return { error: "Inventory record not found for reserved product." };
-  }
 
-  const isAlreadyAllocated = reservation.status === "ACCEPTED";
-  const updatedQty = Math.max(0, invItem.quantity - reservation.quantity);
-  const updatedReserved = isAlreadyAllocated ? invItem.reservedQty : Math.max(0, invItem.reservedQty - reservation.quantity);
-  const updatedAllocated = isAlreadyAllocated ? Math.max(0, (invItem.allocatedQty || 0) - reservation.quantity) : (invItem.allocatedQty || 0);
+  for (const item of items) {
+    const invItem = allInv.find((i: any) => i.sku === item.sku && i.branchCode === reservation.branchCode);
+    if (invItem) {
+      const deductionQty = item.quantity;
+      const updatedQty = Math.max(0, invItem.quantity - deductionQty);
+      const updatedReserved = isAlreadyAllocated ? invItem.reservedQty : Math.max(0, invItem.reservedQty - item.reservedQty);
+      const updatedAllocated = isAlreadyAllocated ? Math.max(0, (invItem.allocatedQty || 0) - item.reservedQty) : (invItem.allocatedQty || 0);
 
-  await erpDb.inventory.update({
-    where: { id: invItem.id },
-    data: {
-      quantity: updatedQty,
-      reservedQty: updatedReserved,
-      allocatedQty: updatedAllocated,
-      availableQty: updatedQty - updatedReserved - updatedAllocated,
-      availableStock: updatedQty - updatedReserved - updatedAllocated,
-      reservedStock: updatedReserved,
-      allocatedStock: updatedAllocated
+      await erpDb.inventory.update({
+        where: { id: invItem.id },
+        data: {
+          quantity: updatedQty,
+          reservedQty: updatedReserved,
+          allocatedQty: updatedAllocated,
+          availableQty: updatedQty - updatedReserved - updatedAllocated,
+          availableStock: updatedQty - updatedReserved - updatedAllocated,
+          reservedStock: updatedReserved,
+          allocatedStock: updatedAllocated
+        }
+      });
+
+      await erpDb.inventoryMovements.create({
+        data: {
+          sku: item.sku,
+          branchCode: reservation.branchCode,
+          type: "REDUCTION",
+          quantity: deductionQty,
+          details: `Purchased reserved stock: ${deductionQty} units of SKU ${item.sku} at ${reservation.branchCode}.`,
+          userId: reservation.customerId
+        }
+      });
+
+      if (updatedQty < 10) {
+        await erpDb.stockAlerts.create({
+          data: {
+            type: "LOW_STOCK",
+            message: `${item.sku} in ${reservation.branchCode} is below reorder level. Current: ${updatedQty} units. Reorder Level: 10.`,
+            branchCode: reservation.branchCode,
+            resolved: false
+          }
+        });
+      }
     }
-  });
+  }
 
   await erpDb.stockReservations.update({
     where: { id: reservationId },
-    data: { status: "COMPLETED" }
-  });
-
-  await erpDb.inventoryMovements.create({
     data: {
-      sku: reservation.sku,
-      branchCode: reservation.branchCode,
-      type: "REDUCTION",
-      quantity: reservation.quantity,
-      details: `Purchased reserved stock: ${reservation.quantity} units of SKU ${reservation.sku} at ${reservation.branchCode}.`,
-      userId: reservation.customerId
+      status: "Completed",
+      completedAt: new Date()
     }
   });
 
-  if (updatedQty < 10) {
-    await erpDb.stockAlerts.create({
-      data: {
-        type: "LOW_STOCK",
-        message: `${reservation.sku} in ${reservation.branchCode} is below reorder level. Current: ${updatedQty} units. Reorder Level: 10.`,
-        branchCode: reservation.branchCode,
-        resolved: false
-      }
-    });
-  }
+  await syncReservationToOpportunity(reservationId);
 
-  // Notify employee and admin
-  if (reservation.employeeId) {
-    await createNotification(reservation.employeeId, "Reservation Completed", `Customer completed purchase for reservation ${reservation.reservationNumber || reservationId}.`);
-  }
-  await notifyAdmins("Reservation Completed", `Customer completed purchase for reservation ${reservation.reservationNumber || reservationId}.`);
+  await notifyReservationEvent(
+    reservationId,
+    "Reservation Completed",
+    `Customer completed purchase for reservation ${reservation.reservationNumber || reservationId}.`
+  );
 
   revalidatePath("/products");
   revalidatePath("/reserved-stock");
@@ -1224,7 +1413,7 @@ export async function checkAndExpireReservationsAction() {
   const now = new Date();
   
   const activeReservations = await erpDb.stockReservations.findMany({
-    where: { status: { in: ["PENDING", "ACTIVE", "ACCEPTED"] } }
+    where: { status: { in: ["PENDING", "ACTIVE", "ACCEPTED", "Pending Verification", "Verified", "Accepted", "Processing"] } }
   });
 
   const expired = activeReservations.filter((res: any) => new Date(res.expiresAt) < now);
@@ -1236,49 +1425,60 @@ export async function checkAndExpireReservationsAction() {
   for (const res of expired) {
     await erpDb.stockReservations.update({
       where: { id: res.id },
-      data: { status: "EXPIRED" }
-    });
-
-    const isAllocated = res.status === "ACCEPTED";
-    const allInv = await erpDb.inventory.findMany();
-    const invItem = allInv.find((i: any) => i.sku === res.sku && i.branchCode === res.branchCode);
-    if (invItem) {
-      const updatedReserved = isAllocated ? invItem.reservedQty : Math.max(0, invItem.reservedQty - res.quantity);
-      const updatedAllocated = isAllocated ? Math.max(0, (invItem.allocatedQty || 0) - res.quantity) : (invItem.allocatedQty || 0);
-      
-      await erpDb.inventory.update({
-        where: { id: invItem.id },
-        data: {
-          reservedQty: updatedReserved,
-          allocatedQty: updatedAllocated,
-          reservedStock: updatedReserved,
-          allocatedStock: updatedAllocated,
-          availableQty: invItem.quantity - updatedReserved,
-          availableStock: invItem.quantity - updatedReserved
-        }
-      });
-    }
-
-    await erpDb.inventoryMovements.create({
       data: {
-        sku: res.sku,
-        branchCode: res.branchCode,
-        type: "ADJUSTMENT",
-        quantity: 0,
-        details: `Stock reservation expired. Released ${res.quantity} units of SKU ${res.sku} at ${res.branchCode}.`,
-        userId: "system"
+        status: "Cancelled",
+        notes: res.notes ? `${res.notes} | [Expired]` : "[Expired]",
+        cancelledAt: new Date()
       }
     });
 
-    // Notify customer
-    await createNotification(res.customerId, "Reservation Expired", `Your reservation ${res.reservationNumber} for ${res.quantity} units of ${res.sku} has expired.`);
+    const isAllocated = ["ACCEPTED", "Accepted", "Processing"].includes(res.status);
+    const items = await erpDb.stockReservationItems.findMany({ where: { reservationId: res.id } });
+    const allInv = await erpDb.inventory.findMany();
+
+    for (const item of items) {
+      const invItem = allInv.find((i: any) => i.sku === item.sku && i.branchCode === res.branchCode);
+      if (invItem) {
+        const updatedReserved = isAllocated ? invItem.reservedQty : Math.max(0, invItem.reservedQty - item.reservedQty);
+        const updatedAllocated = isAllocated ? Math.max(0, (invItem.allocatedQty || 0) - item.reservedQty) : (invItem.allocatedQty || 0);
+        
+        await erpDb.inventory.update({
+          where: { id: invItem.id },
+          data: {
+            reservedQty: updatedReserved,
+            allocatedQty: updatedAllocated,
+            reservedStock: updatedReserved,
+            allocatedStock: updatedAllocated,
+            availableQty: invItem.quantity - updatedReserved - updatedAllocated,
+            availableStock: invItem.quantity - updatedReserved - updatedAllocated
+          }
+        });
+
+        await erpDb.inventoryMovements.create({
+          data: {
+            sku: item.sku,
+            branchCode: res.branchCode,
+            type: "ADJUSTMENT",
+            quantity: 0,
+            details: `Stock reservation expired. Released ${item.reservedQty} units of SKU ${item.sku} at ${res.branchCode}.`,
+            userId: "system"
+          }
+        });
+      }
+    }
+
+    await syncReservationToOpportunity(res.id);
+
+    await notifyReservationEvent(
+      res.id,
+      "Reservation Expired",
+      `Your reservation ${res.reservationNumber} has expired.`
+    );
     
-    // Notify employee
     if (res.employeeId) {
       await createNotification(res.employeeId, "Reservation Expired", `Reservation ${res.reservationNumber} for customer ${res.user?.name || "Customer"} has expired.`);
     }
 
-    // Notify admins
     await notifyAdmins("Reservation Expired", `Reservation ${res.reservationNumber} for customer ${res.user?.name || "Customer"} has expired.`);
   }
 
@@ -1371,7 +1571,7 @@ export async function cancelReservationAction(reservationId: string, userId: str
   }
 
   const user = await erpDb.users.findUnique({ where: { id: userId } });
-  const isAdmin = user ? ["SUPER_ADMIN", "ADMIN"].includes(user.roleId) : false;
+  const isAdmin = user ? ["SUPER_ADMIN", "ADMIN", "DIRECTOR_OPERATIONS", "OPERATIONS_MANAGER", "ASSISTANT_MANAGER"].includes(user.roleId) : false;
   const isCreator = reservation.employeeId === userId;
   const isOwner = reservation.customerId === userId;
 
@@ -1379,55 +1579,62 @@ export async function cancelReservationAction(reservationId: string, userId: str
     return { error: "Unauthorized: You do not have permission to cancel this reservation." };
   }
 
-  if (reservation.status !== "PENDING" && reservation.status !== "ACTIVE" && reservation.status !== "ACCEPTED") {
+  if (!["PENDING", "ACTIVE", "ACCEPTED", "Pending Verification", "Verified", "Accepted", "Processing", "Draft"].includes(reservation.status)) {
     return { error: `Cannot cancel reservation with status: ${reservation.status}` };
   }
 
-  const isAllocated = reservation.status === "ACCEPTED";
+  const isAllocated = ["ACCEPTED", "Accepted", "Processing"].includes(reservation.status);
 
-  // Mark reservation as CANCELLED
   await erpDb.stockReservations.update({
     where: { id: reservationId },
-    data: { status: "CANCELLED" }
-  });
-
-  // Release the stock back to available inventory
-  const allInv = await erpDb.inventory.findMany();
-  const invItem = allInv.find((i: any) => i.sku === reservation.sku && i.branchCode === reservation.branchCode);
-  if (invItem) {
-    const updatedReserved = isAllocated ? invItem.reservedQty : Math.max(0, invItem.reservedQty - reservation.quantity);
-    const updatedAllocated = isAllocated ? Math.max(0, (invItem.allocatedQty || 0) - reservation.quantity) : (invItem.allocatedQty || 0);
-    
-    await erpDb.inventory.update({
-      where: { id: invItem.id },
-      data: {
-        reservedQty: updatedReserved,
-        allocatedQty: updatedAllocated,
-        reservedStock: updatedReserved,
-        allocatedStock: updatedAllocated,
-        availableQty: invItem.quantity - updatedReserved - updatedAllocated,
-        availableStock: invItem.quantity - updatedReserved - updatedAllocated
-      }
-    });
-  }
-
-  // Audit movement
-  await erpDb.inventoryMovements.create({
     data: {
-      sku: reservation.sku,
-      branchCode: reservation.branchCode,
-      type: "ADJUSTMENT",
-      quantity: 0,
-      details: `${isAdmin ? "Admin" : isCreator ? "Employee" : "Customer"} cancelled reservation ${reservation.reservationNumber || reservationId}. Released ${reservation.quantity} units back to available stock.`,
-      userId: userId
+      status: "Cancelled",
+      cancelledAt: new Date()
     }
   });
 
-  // Notify employee and admin
-  if (reservation.employeeId) {
-    await createNotification(reservation.employeeId, "Reservation Cancelled", `${isAdmin ? "Admin" : isCreator ? "Employee" : "Customer"} cancelled reservation ${reservation.reservationNumber || reservationId}.`);
+  const items = await erpDb.stockReservationItems.findMany({ where: { reservationId } });
+  const allInv = await erpDb.inventory.findMany();
+
+  for (const item of items) {
+    const invItem = allInv.find((i: any) => i.sku === item.sku && i.branchCode === reservation.branchCode);
+    if (invItem) {
+      const updatedReserved = isAllocated ? invItem.reservedQty : Math.max(0, invItem.reservedQty - item.reservedQty);
+      const updatedAllocated = isAllocated ? Math.max(0, (invItem.allocatedQty || 0) - item.reservedQty) : (invItem.allocatedQty || 0);
+      
+      await erpDb.inventory.update({
+        where: { id: invItem.id },
+        data: {
+          reservedQty: updatedReserved,
+          allocatedQty: updatedAllocated,
+          reservedStock: updatedReserved,
+          allocatedStock: updatedAllocated,
+          availableQty: invItem.quantity - updatedReserved - updatedAllocated,
+          availableStock: invItem.quantity - updatedReserved - updatedAllocated
+        }
+      });
+
+      await erpDb.inventoryMovements.create({
+        data: {
+          sku: item.sku,
+          branchCode: reservation.branchCode,
+          type: "ADJUSTMENT",
+          quantity: 0,
+          details: `${isAdmin ? "Admin" : isCreator ? "Employee" : "Customer"} cancelled reservation. Released ${item.reservedQty} units back to available stock for SKU ${item.sku}.`,
+          userId: userId
+        }
+      });
+    }
   }
-  await notifyAdmins("Reservation Cancelled", `${isAdmin ? "Admin" : isCreator ? "Employee" : "Customer"} cancelled reservation ${reservation.reservationNumber || reservationId}.`);
+
+  await syncReservationToOpportunity(reservationId);
+
+  const performerName = user?.name || "User";
+  await notifyReservationEvent(
+    reservationId,
+    "Reservation Cancelled",
+    `Reservation ${reservation.reservationNumber} has been cancelled by ${performerName}.`
+  );
 
   revalidatePath("/reserved-stock");
   revalidatePath("/products");
@@ -1560,9 +1767,10 @@ export async function updateBranchPermissionsAction(branchId: string, pagePermis
 
 export async function updateReservationAction(data: {
   reservationId: string;
-  quantity: number;
+  quantity?: number;
   expiresAt: string;
   notes?: string;
+  items?: Array<{ productId: string; quantity: number }>;
 }) {
   const performedBy = await getCurrentUserId();
   
@@ -1571,69 +1779,231 @@ export async function updateReservationAction(data: {
     return { error: "Reservation not found." };
   }
 
-  if (reservation.customerId !== performedBy) {
-    return { error: "Unauthorized: You can only edit your own reservations." };
+  const performingUser = await erpDb.users.findUnique({ where: { id: performedBy } });
+  const isExecutiveOrStaff = performingUser ? ["OPERATIONS_EXECUTIVE", "SUPER_ADMIN", "ADMIN", "DIRECTOR_OPERATIONS", "OPERATIONS_MANAGER", "ASSISTANT_MANAGER"].includes(performingUser.roleId) : false;
+  const isOwner = reservation.customerId === performedBy;
+  const isAssignedExecutive = reservation.employeeId === performedBy;
+
+  if (!isOwner && !isExecutiveOrStaff && !isAssignedExecutive) {
+    return { error: "Unauthorized: Only the customer or assigned Operations Executive can edit this reservation." };
   }
 
-  if (reservation.status !== "Pending Customer Approval" && reservation.status !== "PENDING") {
-    return { error: `Cannot edit reservation in its current state: ${reservation.status}` };
+  const originalExpiresTime = new Date(reservation.expiresAt).getTime();
+  const newExpiresTime = new Date(data.expiresAt).getTime();
+  if (originalExpiresTime !== newExpiresTime) {
+    if (isOwner) {
+      return { error: "Unauthorized: Only the assigned Operations Executive or staff can adjust the reservation deadline." };
+    }
+    const maxExpiry = new Date(new Date(reservation.createdAt).getTime() + 14 * 24 * 60 * 60 * 1000);
+    if (newExpiresTime > maxExpiry.getTime()) {
+      return { error: "Reservation deadline cannot exceed the 14-day policy limit from creation date." };
+    }
   }
 
+  const oldItems = await erpDb.stockReservationItems.findMany({ where: { reservationId: data.reservationId } });
   const allInv = await erpDb.inventory.findMany();
-  const invItem = allInv.find((i: any) => i.sku === reservation.sku && i.branchCode === reservation.branchCode);
-  if (!invItem) {
-    return { error: "Inventory record not found." };
+  
+  for (const oldItem of oldItems) {
+    const invItem = allInv.find((i: any) => i.sku === oldItem.sku && i.branchCode === reservation.branchCode);
+    if (invItem && oldItem.reservedQty > 0) {
+      const updatedReserved = Math.max(0, invItem.reservedQty - oldItem.reservedQty);
+      const updatedAllocated = invItem.allocatedQty || 0;
+      await erpDb.inventory.update({
+        where: { id: invItem.id },
+        data: {
+          reservedQty: updatedReserved,
+          availableQty: Math.max(0, invItem.quantity - updatedReserved - updatedAllocated),
+          reservedStock: updatedReserved,
+          availableStock: Math.max(0, invItem.quantity - updatedReserved - updatedAllocated)
+        }
+      });
+    }
   }
 
-  const quantityDiff = data.quantity - reservation.quantity;
-  const freeStock = invItem.quantity - invItem.reservedQty;
+  await erpDb.stockReservationItems.deleteMany({ where: { reservationId: data.reservationId } });
 
-  if (quantityDiff > freeStock) {
-    return { error: `Insufficient stock in branch ${reservation.branchCode} to increase quantity. Available: ${freeStock}, Requested increase: ${quantityDiff}` };
+  const newItems = data.items || [];
+  if (newItems.length === 0 && data.quantity !== undefined) {
+    newItems.push({ productId: reservation.productId || "", quantity: data.quantity });
   }
 
+  const productIds = newItems.map(it => it.productId);
+  if (new Set(productIds).size !== productIds.length) {
+    return { error: "Duplicate products are not allowed in the same reservation request." };
+  }
+
+  const freshInv = await erpDb.inventory.findMany();
+
+  const processedItems = [];
+  for (const item of newItems) {
+    const product = await erpDb.products.findUnique({ where: { id: item.productId } });
+    if (!product) {
+      return { error: `Product not found for ID ${item.productId}.` };
+    }
+
+    const invItem = freshInv.find((i: any) => i.sku === product.sku && i.branchCode === reservation.branchCode);
+    const freeStock = invItem ? Math.max(0, invItem.quantity - invItem.reservedQty) : 0;
+    
+    const lockQty = Math.min(item.quantity, freeStock);
+    const shortageQty = item.quantity - lockQty;
+    const itemStatus = shortageQty > 0 ? "Pending Procurement" : "Reserved";
+
+    await erpDb.stockReservationItems.create({
+      data: {
+        reservationId: reservation.id,
+        productId: item.productId,
+        sku: product.sku,
+        quantity: item.quantity,
+        status: itemStatus,
+        reservedQty: lockQty,
+        shortageQty
+      }
+    });
+
+    if (lockQty > 0 && invItem) {
+      const updatedReserved = invItem.reservedQty + lockQty;
+      const updatedAllocated = invItem.allocatedQty || 0;
+      await erpDb.inventory.update({
+        where: { id: invItem.id },
+        data: {
+          reservedQty: updatedReserved,
+          availableQty: Math.max(0, invItem.quantity - updatedReserved - updatedAllocated),
+          reservedStock: updatedReserved,
+          availableStock: Math.max(0, invItem.quantity - updatedReserved - updatedAllocated)
+        }
+      });
+
+      await erpDb.inventoryMovements.create({
+        data: {
+          sku: product.sku,
+          branchCode: reservation.branchCode,
+          type: "RESERVATION",
+          quantity: lockQty,
+          details: `Updated reservation: Reserved stock for SKU ${product.sku} under reservation ${reservation.reservationNumber}`,
+          userId: performedBy
+        }
+      });
+    }
+
+    processedItems.push({
+      productId: item.productId,
+      sku: product.sku,
+      quantity: item.quantity
+    });
+  }
+
+  const firstItem = processedItems[0] || { productId: null, sku: null, quantity: null };
   const updatedRes = await erpDb.stockReservations.update({
     where: { id: data.reservationId },
     data: {
-      quantity: data.quantity,
+      productId: firstItem.productId,
+      sku: firstItem.sku,
+      quantity: firstItem.quantity,
       expiresAt: new Date(data.expiresAt),
       notes: data.notes || null,
-      status: "Modified by Customer (Pending Verification)"
+      status: "Pending Verification"
     }
   });
 
-  const updatedReserved = invItem.reservedQty + quantityDiff;
-  await erpDb.inventory.update({
-    where: { id: invItem.id },
-    data: {
-      reservedQty: updatedReserved,
-      availableQty: invItem.quantity - updatedReserved,
-      reservedStock: updatedReserved,
-      availableStock: invItem.quantity - updatedReserved
-    }
-  });
+  await syncReservationToOpportunity(data.reservationId);
 
-  await erpDb.inventoryMovements.create({
-    data: {
-      sku: reservation.sku,
-      branchCode: reservation.branchCode,
-      type: "ADJUSTMENT",
-      quantity: 0,
-      details: `Customer modified reservation ${reservation.reservationNumber || data.reservationId}. Updated quantity to ${data.quantity} and expiresAt to ${data.expiresAt}.`,
-      userId: performedBy
-    }
-  });
-
-  if (reservation.employeeId) {
-    await createNotification(reservation.employeeId, "Reservation Modified", `Customer modified reservation ${reservation.reservationNumber} (Pending Verification).`);
-  }
-  await notifyAdmins("Reservation Modified", `Customer modified reservation ${reservation.reservationNumber} for customer ${reservation.user?.name || "Customer"}.`);
+  await notifyReservationEvent(
+    data.reservationId,
+    "Reservation Updated",
+    `Reservation ${reservation.reservationNumber} has been updated (Status: Pending Verification).`
+  );
 
   revalidatePath("/reserved-stock");
   revalidatePath("/products");
   revalidatePath("/dashboard");
 
   return { success: true, reservation: updatedRes };
+}
+
+export async function verifyReservationAction(reservationId: string) {
+  const performedBy = await getCurrentUserId();
+  const user = await erpDb.users.findUnique({ where: { id: performedBy } });
+  
+  const reservation = await erpDb.stockReservations.findUnique({
+    where: { id: reservationId }
+  });
+  if (!reservation) {
+    return { error: "Reservation not found." };
+  }
+
+  const isAssignedExecutive = reservation.employeeId === performedBy;
+  const isStaffOrAdmin = user ? ["SUPER_ADMIN", "ADMIN", "DIRECTOR_OPERATIONS", "OPERATIONS_MANAGER", "ASSISTANT_MANAGER", "OPERATIONS_EXECUTIVE"].includes(user.roleId) : false;
+
+  if (!isAssignedExecutive && !isStaffOrAdmin) {
+    return { error: "Unauthorized: Only the assigned Operations Executive or staff can verify this reservation." };
+  }
+
+  if (reservation.status !== "Pending Verification" && reservation.status !== "Modified by Customer (Pending Verification)" && reservation.status !== "PENDING") {
+    return { error: `Reservation is not in a verification state. Current status: ${reservation.status}` };
+  }
+
+  const updated = await erpDb.stockReservations.update({
+    where: { id: reservationId },
+    data: {
+      status: "Verified",
+      verifiedAt: new Date()
+    }
+  });
+
+  // Sync to Opportunity
+  await syncReservationToOpportunity(reservationId);
+
+  // Notify customer & hierarchy
+  await notifyReservationEvent(
+    reservationId,
+    "Reservation Verified",
+    `Reservation ${reservation.reservationNumber} has been verified.`
+  );
+
+  revalidatePath("/reserved-stock");
+  revalidatePath("/dashboard");
+  return { success: true };
+}
+
+export async function processReservationAction(reservationId: string) {
+  const performedBy = await getCurrentUserId();
+  const user = await erpDb.users.findUnique({ where: { id: performedBy } });
+  const isStaff = user ? ["SUPER_ADMIN", "ADMIN", "DIRECTOR_OPERATIONS", "OPERATIONS_MANAGER", "ASSISTANT_MANAGER", "OPERATIONS_EXECUTIVE"].includes(user.roleId) : false;
+
+  if (!isStaff) {
+    return { error: "Unauthorized: Only staff can move reservations to processing." };
+  }
+
+  const reservation = await erpDb.stockReservations.findUnique({ where: { id: reservationId } });
+  if (!reservation) {
+    return { error: "Reservation not found." };
+  }
+
+  if (reservation.status !== "Accepted" && reservation.status !== "ACCEPTED") {
+    return { error: `Only accepted reservations can be processed. Current status: ${reservation.status}` };
+  }
+
+  await erpDb.stockReservations.update({
+    where: { id: reservationId },
+    data: {
+      status: "Processing",
+      processingAt: new Date()
+    }
+  });
+
+  // Sync to Opportunity
+  await syncReservationToOpportunity(reservationId);
+
+  // Notify customer & hierarchy
+  await notifyReservationEvent(
+    reservationId,
+    "Reservation Processing",
+    `Your reservation ${reservation.reservationNumber} is now being processed.`
+  );
+
+  revalidatePath("/reserved-stock");
+  revalidatePath("/dashboard");
+  return { success: true };
 }
 
 export async function verifyModifiedReservationAction(reservationId: string, action: "ACCEPT" | "REJECT") {
@@ -1936,7 +2306,8 @@ export async function verifyPurchaseOrderAction(poId: string) {
 
 export async function lookupPurchaseOrderByNumberAction(poNumber: string) {
   try {
-    const po = await erpDb.purchaseOrders.findUnique({ where: { poNumber } });
+    const pos = await erpDb.purchaseOrders.findMany();
+    const po = pos.find((p: any) => p.poNumber.toLowerCase() === poNumber.toLowerCase().trim());
     if (!po) {
       return { found: false };
     }
@@ -2109,3 +2480,109 @@ export async function getProductPriceAction(sku: string, branchCode: string) {
     return { success: false, unitPrice: 0, error: err.message };
   }
 }
+
+// ─── Phase 20: Profile Update Request Actions ─────────────────────────
+
+export async function submitProfileUpdateRequestAction(data: {
+  userId: string;
+  contactPerson: string;
+  email: string;
+  phone: string;
+  companyAddress: string;
+  alternateContact?: string;
+}) {
+  try {
+    const user = await erpDb.users.findUnique({ where: { id: data.userId } });
+    if (!user) return { success: false, error: "User not found" };
+
+    // Create pending request
+    const request = await erpDb.profileUpdateRequests.create({
+      data: {
+        userId: data.userId,
+        contactPerson: data.contactPerson,
+        email: data.email,
+        phone: data.phone,
+        companyAddress: data.companyAddress,
+        alternateContact: data.alternateContact || "",
+        status: "PENDING"
+      }
+    });
+
+    auditLog("PROFILE_UPDATE_SUBMITTED", data.userId, data.userId, { requestId: request.id });
+    revalidatePath("/profile");
+    revalidatePath("/settings");
+    return { success: true, request, message: "Profile update request submitted for company approval." };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Failed to submit profile update request" };
+  }
+}
+
+export async function getProfileRequestsForUserAction(userId: string) {
+  try {
+    const requests = await erpDb.profileUpdateRequests.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" }
+    });
+    return { success: true, requests };
+  } catch (err: any) {
+    return { success: false, requests: [], error: err.message };
+  }
+}
+
+export async function getPendingProfileRequestsAction() {
+  try {
+    const requests = await erpDb.profileUpdateRequests.findMany({
+      where: { status: "PENDING" },
+      orderBy: { createdAt: "desc" }
+    });
+    return { success: true, requests };
+  } catch (err: any) {
+    return { success: false, requests: [], error: err.message };
+  }
+}
+
+export async function reviewProfileUpdateRequestAction(data: {
+  requestId: string;
+  action: "APPROVE" | "REJECT";
+  reviewerId: string;
+}) {
+  try {
+    const request = await erpDb.profileUpdateRequests.findUnique({ where: { id: data.requestId } });
+    if (!request) return { success: false, error: "Profile request not found" };
+    if (request.status !== "PENDING") return { success: false, error: "Request has already been processed" };
+
+    const newStatus = data.action === "APPROVE" ? "APPROVED" : "REJECTED";
+
+    // Update request
+    const updatedReq = await erpDb.profileUpdateRequests.update({
+      where: { id: data.requestId },
+      data: {
+        status: newStatus,
+        reviewedBy: data.reviewerId,
+        reviewedAt: new Date()
+      }
+    });
+
+    // If APPROVED, update actual User record
+    if (data.action === "APPROVE") {
+      await erpDb.users.update({
+        where: { id: request.userId },
+        data: {
+          name: request.contactPerson,
+          email: request.email,
+          phone: request.phone,
+          address: request.companyAddress
+        }
+      });
+    }
+
+    auditLog("PROFILE_UPDATE_REVIEWED", data.reviewerId, request.userId, { action: data.action, requestId: data.requestId });
+    revalidatePath("/profile");
+    revalidatePath("/settings");
+    revalidatePath("/admin/customers");
+    return { success: true, request: updatedReq, message: `Request ${newStatus.toLowerCase()} successfully.` };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Failed to process review" };
+  }
+}
+

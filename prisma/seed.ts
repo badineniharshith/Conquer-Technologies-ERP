@@ -60,15 +60,15 @@ async function main() {
 
   // 4. Users
   const users = [
-    { id: "u-superadmin", name: "Corporate Super Admin", email: "superadmin@conquererp.com", passwordHash: hashPassword("Admin@2026#Secure"), roleId: "SUPER_ADMIN", branchId: null, isActive: true, status: "ACTIVE", branchName: "Head Office" },
-    { id: "u-admin", name: "System Admin", email: "admin@conquererp.com", passwordHash: hashPassword("Admin@2026"), roleId: "ADMIN", branchId: null, isActive: true, status: "ACTIVE", branchName: "Head Office" },
-    { id: "u-saleshead", name: "Global Sales Head", email: "saleshead@conquererp.com", passwordHash: hashPassword("SalesHead@2026"), roleId: "EMPLOYEE", branchId: null, isActive: true, status: "ACTIVE", branchName: "Head Office" },
-    { id: "u-rsm-south", name: "Regional Manager South", email: "rsm.south@conquererp.com", passwordHash: hashPassword("RSM@South2026"), roleId: "EMPLOYEE", branchId: null, isActive: true, status: "ACTIVE", branchName: "Head Office" },
-    { id: "u-bm-hyd", name: "Hyderabad Branch Manager", email: "bm.hyd@conquererp.com", passwordHash: hashPassword("BM@Hyd2026"), roleId: "EMPLOYEE", branchId: "HYD-HQ", isActive: true, status: "ACTIVE", branchName: "Hyderabad Corporate Office" },
-    { id: "u-salesmgr", name: "Sales Manager HYD", email: "manager.hyd@conquererp.com", passwordHash: hashPassword("Manager@Hyd2026"), roleId: "EMPLOYEE", branchId: "HYD-HQ", isActive: true, status: "ACTIVE", branchName: "Hyderabad Corporate Office" },
-    { id: "u-exec-hyd", name: "Sales Executive HYD", email: "exec.hyd@conquererp.com", passwordHash: hashPassword("Exec@Hyd#2026"), roleId: "EMPLOYEE", branchId: "HYD-HQ", isActive: true, status: "ACTIVE", branchName: "Hyderabad Corporate Office" },
-    { id: "u-employee-generic", name: "Company Employee", email: "employee@conquererp.com", passwordHash: hashPassword("Employee@2026"), roleId: "EMPLOYEE", branchId: "HYD-HQ", isActive: true, status: "ACTIVE", branchName: "Hyderabad Corporate Office" },
-    { id: "u-customer", name: "Premium Customer", email: "customer@gmail.com", passwordHash: hashPassword("Customer#2026"), roleId: "CUSTOMER", branchId: null, isActive: true, status: "ACTIVE", branchName: "None" }
+    { id: "u-superadmin", name: "Corporate Super Admin", email: "superadmin@conquererp.com", passwordHash: hashPassword("Admin@123"), roleId: "SUPER_ADMIN", branchId: null, isActive: true, status: "ACTIVE", branchName: "Head Office" },
+    { id: "u-admin", name: "System Admin", email: "admin@conquererp.com", passwordHash: hashPassword("Admin@123"), roleId: "ADMIN", branchId: null, isActive: true, status: "ACTIVE", branchName: "Head Office" },
+    { id: "u-saleshead", name: "Global Sales Head", email: "saleshead@conquererp.com", passwordHash: hashPassword("Admin@123"), roleId: "EMPLOYEE", branchId: null, isActive: true, status: "ACTIVE", branchName: "Head Office" },
+    { id: "u-rsm-south", name: "Regional Manager South", email: "rsm.south@conquererp.com", passwordHash: hashPassword("Admin@123"), roleId: "EMPLOYEE", branchId: null, isActive: true, status: "ACTIVE", branchName: "Head Office" },
+    { id: "u-bm-hyd", name: "Hyderabad Branch Manager", email: "bm.hyd@conquererp.com", passwordHash: hashPassword("Admin@123"), roleId: "EMPLOYEE", branchId: "HYD-HQ", isActive: true, status: "ACTIVE", branchName: "Hyderabad Corporate Office" },
+    { id: "u-salesmgr", name: "Sales Manager HYD", email: "manager.hyd@conquererp.com", passwordHash: hashPassword("Admin@123"), roleId: "EMPLOYEE", branchId: "HYD-HQ", isActive: true, status: "ACTIVE", branchName: "Hyderabad Corporate Office" },
+    { id: "u-exec-hyd", name: "Sales Executive HYD", email: "exec.hyd@conquererp.com", passwordHash: hashPassword("Admin@123"), roleId: "EMPLOYEE", branchId: "HYD-HQ", isActive: true, status: "ACTIVE", branchName: "Hyderabad Corporate Office" },
+    { id: "u-employee-generic", name: "Company Employee", email: "employee@conquererp.com", passwordHash: hashPassword("Admin@123"), roleId: "EMPLOYEE", branchId: "HYD-HQ", isActive: true, status: "ACTIVE", branchName: "Hyderabad Corporate Office" },
+    { id: "u-customer", name: "Premium Customer", email: "customer@gmail.com", passwordHash: hashPassword("Admin@123"), roleId: "CUSTOMER", branchId: null, isActive: true, status: "ACTIVE", branchName: "None" }
   ];
 
   const customerNames = [
@@ -89,7 +89,7 @@ async function main() {
       id: `u-cust-${idx + 1}`,
       name,
       email: `${slug}@gmail.com`,
-      passwordHash: hashPassword("Customer#2026"),
+      passwordHash: hashPassword("Admin@123"),
       roleId: "CUSTOMER",
       branchId: null,
       isActive: true,
