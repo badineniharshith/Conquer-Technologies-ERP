@@ -13,19 +13,75 @@ export async function GET(req: NextRequest) {
     const isAdmin = user.roleId === "ADMIN" || user.roleId === "SUPER_ADMIN";
     const isCustomer = user.roleId === "CUSTOMER";
 
+    const role = user.roleId;
     let reservations: any[] = [];
-    if (isAdmin) {
+
+    if (role === "SUPER_ADMIN" || role === "DIRECTOR_OPERATIONS" || role === "ADMIN") {
+      // Super Admin & Director: Full visibility across all operations
       reservations = await erpDb.stockReservations.findMany({
         orderBy: { createdAt: "desc" }
       });
-    } else if (isEmployee) {
+    } else if (role === "OPERATIONS_MANAGER") {
+      // Manager: All Assistant Managers, Executives, and Customers under them
+      const mySubordinates = await erpDb.users.findMany({
+        where: { reportsToId: user.id },
+        select: { id: true }
+      });
+      const subIds = mySubordinates.map((s: any) => s.id);
+
+      const execSubordinates = await erpDb.users.findMany({
+        where: { reportsToId: { in: subIds } },
+        select: { id: true }
+      });
+      const execIds = execSubordinates.map((e: any) => e.id);
+
+      const allDownlineUserIds = [user.id, ...subIds, ...execIds];
+
       reservations = await erpDb.stockReservations.findMany({
-        where: { employeeId: user.id },
+        where: {
+          OR: [
+            { employeeId: { in: allDownlineUserIds } },
+            { customerId: { in: allDownlineUserIds } }
+          ]
+        },
         orderBy: { createdAt: "desc" }
       });
-    } else if (isCustomer) {
+    } else if (role === "ASSISTANT_MANAGER") {
+      // Assistant Manager: All Executives under them & customers of those executives
+      const myExecutives = await erpDb.users.findMany({
+        where: { reportsToId: user.id },
+        select: { id: true }
+      });
+      const execIds = myExecutives.map((e: any) => e.id);
+
+      reservations = await erpDb.stockReservations.findMany({
+        where: {
+          OR: [
+            { employeeId: { in: [user.id, ...execIds] } },
+            { user: { reportsToId: { in: [user.id, ...execIds] } } }
+          ]
+        },
+        orderBy: { createdAt: "desc" }
+      });
+    } else if (role === "OPERATIONS_EXECUTIVE") {
+      // Operations Executive: Only their customers and reservations assigned to them
+      reservations = await erpDb.stockReservations.findMany({
+        where: {
+          OR: [
+            { employeeId: user.id },
+            { user: { reportsToId: user.id } }
+          ]
+        },
+        orderBy: { createdAt: "desc" }
+      });
+    } else if (role === "CUSTOMER") {
+      // Customer: Only own reservations
       reservations = await erpDb.stockReservations.findMany({
         where: { customerId: user.id },
+        orderBy: { createdAt: "desc" }
+      });
+    } else {
+      reservations = await erpDb.stockReservations.findMany({
         orderBy: { createdAt: "desc" }
       });
     }

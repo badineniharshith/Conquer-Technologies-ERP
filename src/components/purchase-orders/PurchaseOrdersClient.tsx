@@ -109,9 +109,15 @@ export default function PurchaseOrdersClient({
   // Apply Role-Based Data Isolation
   const filteredPurchaseOrders = useMemo(() => {
     return initialPurchaseOrders.filter(po => {
-      // 1. Customer role isolation: strictly see own POs only
+      // 1. Customer role isolation: see own POs
       if (isCustomer) {
-        return po.customerId === activeUser?.id || po.customerName === activeUser?.name;
+        return (
+          po.customerId === activeUser?.id ||
+          po.customerName?.toLowerCase() === activeUser?.name?.toLowerCase() ||
+          po.companyName?.toLowerCase() === activeUser?.companyName?.toLowerCase() ||
+          po.customerEmail?.toLowerCase() === activeUser?.email?.toLowerCase() ||
+          (activeUser?.email && po.email && po.email.toLowerCase() === activeUser.email.toLowerCase())
+        );
       }
 
       // 2. Branch filters for staff
@@ -597,22 +603,33 @@ export default function PurchaseOrdersClient({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[10px] font-bold text-stone-550 uppercase tracking-wider mb-1">Customer</label>
-                  <select
-                    required
+                  <label className="block text-[10px] font-bold text-stone-555 uppercase tracking-wider mb-1">Customer</label>
+                  <SearchableDropdown
+                    options={customers.map(c => ({
+                      value: c.id,
+                      label: `${c.customerId ? `[${c.customerId}] ` : ""}${c.name} ${c.companyName ? `(${c.companyName})` : `(${c.email})`}`
+                    }))}
                     value={selectedCustomerId}
-                    onChange={(e) => {
-                      setSelectedCustomerId(e.target.value);
-                      const c = customers.find(cu => cu.id === e.target.value);
-                      if (c) setCustomerName(c.name);
+                    onChange={(val) => {
+                      setSelectedCustomerId(val);
+                      const c = customers.find(cu => cu.id === val);
+                      if (c) {
+                        setCustomerName(c.name);
+                        setCompanyName(c.companyName || c.name);
+                        
+                        // Auto-fill branch
+                        if (c.branchId) {
+                          const br = branches.find(b => b.id === c.branchId || b.name === c.branchId);
+                          if (br) {
+                            setSelectedBranchCode(br.id);
+                          }
+                        } else if (c.assignedEmployee && c.assignedEmployee.branchCode) {
+                          setSelectedBranchCode(c.assignedEmployee.branchCode);
+                        }
+                      }
                     }}
-                    className="w-full px-3 py-2 bg-stone-50 border border-stone-250 rounded-lg outline-none focus:border-orange-500 text-stone-850"
-                  >
-                    <option value="">Choose Customer...</option>
-                    {customers.map(c => (
-                      <option key={c.id} value={c.id}>{c.name} ({c.email})</option>
-                    ))}
-                  </select>
+                    placeholder="Search Customer ID or Name..."
+                  />
                 </div>
 
                 <div>
@@ -650,6 +667,25 @@ export default function PurchaseOrdersClient({
                   />
                 </div>
               </div>
+
+              {/* Auto-filled Customer Summary Card */}
+              {selectedCustomerId && (() => {
+                const sel = customers.find(c => c.id === selectedCustomerId);
+                if (!sel) return null;
+                return (
+                  <div className="p-3 bg-orange-50/50 border border-orange-100 rounded-xl text-[10px] text-stone-600 space-y-1">
+                    <div className="text-[9px] font-black text-orange-600 uppercase tracking-wider mb-0.5">Auto-Filled Customer Profile</div>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+                      <div><span className="font-bold text-stone-400">ID:</span> {sel.customerId || "—"}</div>
+                      <div><span className="font-bold text-stone-400">Company:</span> {sel.companyName || sel.name}</div>
+                      <div><span className="font-bold text-stone-400">GST:</span> {sel.gstNumber || "—"}</div>
+                      <div><span className="font-bold text-stone-400">Phone:</span> {sel.phone || "—"}</div>
+                      <div><span className="font-bold text-stone-400">Email:</span> {sel.email}</div>
+                      <div><span className="font-bold text-stone-400">Address:</span> {sel.address || "—"}</div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Vendor Section */}
               <div className="border-t border-stone-100 pt-3 space-y-2">

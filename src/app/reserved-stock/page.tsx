@@ -25,7 +25,8 @@ export default async function ReservedStockPage() {
   let inventory: any[] = [];
 
   const isCustomer = payload.role === "CUSTOMER";
-  const isAdmin = ["SUPER_ADMIN", "ADMIN"].includes(payload.role);
+  const isSuperAdmin = payload.role === "SUPER_ADMIN";
+  const isDirectorOrManager = ["DIRECTOR_OPERATIONS", "OPERATIONS_MANAGER", "ADMIN"].includes(payload.role);
 
   // Fetch reservations based on role
   if (isCustomer) {
@@ -37,7 +38,7 @@ export default async function ReservedStockPage() {
         employee: true
       }
     });
-  } else if (isAdmin) {
+  } else if (isSuperAdmin || isDirectorOrManager) {
     reservations = await erpDb.stockReservations.findMany({
       include: {
         product: true,
@@ -46,10 +47,9 @@ export default async function ReservedStockPage() {
       }
     });
   } else {
-    // Employee / Sales Rep
-    // Fetch assigned customer IDs to load relevant reservations
+    // Executive / Assistant Manager
     const assigned = await erpDb.users.findMany({
-      where: { roleId: "CUSTOMER", assignedEmployeeId: payload.id },
+      where: { roleId: "CUSTOMER", reportsToId: payload.id },
       select: { id: true }
     });
     const customerIds = assigned.map((c: any) => c.id);
@@ -72,7 +72,12 @@ export default async function ReservedStockPage() {
   // Employees, Admins, and Super Admins should be able to select ANY active Customer when creating a reservation
   if (!isCustomer) {
     customers = await erpDb.users.findMany({
-      where: { roleId: "CUSTOMER", status: "ACTIVE" }
+      where: { roleId: "CUSTOMER", status: "ACTIVE" },
+      include: {
+        assignedEmployee: {
+          select: { id: true, name: true, email: true, phone: true, branchName: true }
+        }
+      }
     });
   }
 
@@ -82,6 +87,8 @@ export default async function ReservedStockPage() {
   });
   inventory = await erpDb.inventory.findMany();
 
+  const branchesList = await erpDb.branches.findMany();
+
   return (
     <ReservedStockClient
       reservations={reservations}
@@ -89,6 +96,7 @@ export default async function ReservedStockPage() {
       customers={customers}
       products={products}
       inventory={inventory}
+      branches={branchesList}
     />
   );
 }

@@ -27,7 +27,8 @@ import {
   Settings,
   LogOut,
   ClipboardList,
-  Target
+  Target,
+  Briefcase
 } from "lucide-react";
 
 interface MenuItem {
@@ -40,63 +41,72 @@ export const getMenuItems = (role: UserRole): MenuItem[] => {
   const items: Partial<Record<UserRole, MenuItem[]>> = {
     SUPER_ADMIN: [
       { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-      { title: "Products", href: "/products", icon: PlusCircle },
+      { title: "Products Catalog", href: "/products", icon: PlusCircle },
       { title: "Categories", href: "/categories", icon: FolderOpen },
-      { title: "Pricing", href: "/pricing", icon: DollarSign },
-      { title: "Pricing History", href: "/pricing/history", icon: TrendingUp },
+      { title: "Pricing Engine", href: "/pricing", icon: DollarSign },
+      { title: "Price History", href: "/pricing/history", icon: TrendingUp },
       { title: "Stock Movement", href: "/stock-movement", icon: ArrowUpDown },
       { title: "Analytics", href: "/analytics", icon: BarChart3 },
-      { title: "Customers", href: "/admin/customers", icon: Users },
-      { title: "Employees", href: "/admin/employees", icon: Users },
       { title: "Stock Reservations", href: "/reserved-stock", icon: Boxes },
       { title: "Purchase Orders", href: "/purchase-orders", icon: ClipboardList },
-      { title: "Settings", href: "/settings", icon: Settings },
+      { title: "User Management", href: "/settings/users", icon: Users },
+      { title: "Org Hierarchy", href: "/settings/hierarchy", icon: Target },
+      { title: "System Settings", href: "/settings", icon: Settings },
       { title: "Database Explorer", href: "/admin/database", icon: Database },
       { title: "Logout", href: "/logout", icon: LogOut },
     ],
-    ADMIN: [
+    DIRECTOR_OPERATIONS: [
       { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-      { title: "Products", href: "/products", icon: PlusCircle },
-      { title: "Categories", href: "/categories", icon: FolderOpen },
-      { title: "Pricing", href: "/pricing", icon: DollarSign },
-      { title: "Pricing History", href: "/pricing/history", icon: TrendingUp },
-      { title: "Stock Movement", href: "/stock-movement", icon: ArrowUpDown },
-      { title: "Analytics", href: "/analytics", icon: BarChart3 },
-      { title: "Customers", href: "/admin/customers", icon: Users },
-      { title: "Employees", href: "/admin/employees", icon: Users },
+      { title: "Analytics & Reports", href: "/analytics", icon: BarChart3 },
+      { title: "Enterprise Customers", href: "/admin/customers", icon: Users },
       { title: "Stock Reservations", href: "/reserved-stock", icon: Boxes },
       { title: "Purchase Orders", href: "/purchase-orders", icon: ClipboardList },
-      { title: "Settings", href: "/settings", icon: Settings },
-      { title: "Database Explorer", href: "/admin/database", icon: Database },
+      { title: "Team Management", href: "/settings/users", icon: Users },
+      { title: "Org Hierarchy", href: "/settings/hierarchy", icon: Target },
       { title: "Logout", href: "/logout", icon: LogOut },
     ],
-    EMPLOYEE: [
+    OPERATIONS_MANAGER: [
       { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-      { title: "Products", href: "/products", icon: PlusCircle },
-      { title: "Pricing", href: "/pricing", icon: DollarSign },
-      { title: "Pricing History", href: "/pricing/history", icon: TrendingUp },
-      { title: "Stock Movement", href: "/stock-movement", icon: ArrowUpDown },
-      { title: "Analytics", href: "/analytics", icon: BarChart3 },
+      { title: "Inventory Master", href: "/products", icon: PlusCircle },
       { title: "Stock Reservations", href: "/reserved-stock", icon: Boxes },
       { title: "Purchase Orders", href: "/purchase-orders", icon: ClipboardList },
+      { title: "Team Customers", href: "/admin/customers", icon: Users },
+      { title: "Stock Movement", href: "/stock-movement", icon: ArrowUpDown },
+      { title: "My Team", href: "/settings/users", icon: Users },
+      { title: "Org Hierarchy", href: "/settings/hierarchy", icon: Target },
+      { title: "Logout", href: "/logout", icon: LogOut },
+    ],
+    ASSISTANT_MANAGER: [
+      { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+      { title: "Operations Executives", href: "/settings/users", icon: Users },
+      { title: "Assigned Customers", href: "/admin/customers", icon: Users },
+      { title: "Stock Reservations", href: "/reserved-stock", icon: Boxes },
+      { title: "Purchase Orders", href: "/purchase-orders", icon: ClipboardList },
+      { title: "Org Hierarchy", href: "/settings/hierarchy", icon: Target },
+      { title: "Logout", href: "/logout", icon: LogOut },
+    ],
+    OPERATIONS_EXECUTIVE: [
+      { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+      { title: "Assigned Customers", href: "/admin/customers", icon: Users },
+      { title: "Products Catalog", href: "/products", icon: PlusCircle },
+      { title: "Stock Reservations", href: "/reserved-stock", icon: Boxes },
+      { title: "Purchase Orders", href: "/purchase-orders", icon: ClipboardList },
+      { title: "Org Hierarchy", href: "/settings/hierarchy", icon: Target },
       { title: "Logout", href: "/logout", icon: LogOut },
     ],
     CUSTOMER: [
       { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-      { title: "Products", href: "/products", icon: PlusCircle },
-      { title: "Price History", href: "/price-history", icon: TrendingUp },
-      { title: "Recommendations", href: "/recommendations", icon: Sparkles },
+      { title: "Products Catalog", href: "/products", icon: PlusCircle },
       { title: "My Reservations", href: "/reserved-stock", icon: Boxes },
       { title: "My Purchase Orders", href: "/purchase-orders", icon: ClipboardList },
+      { title: "Price History", href: "/price-history", icon: TrendingUp },
+      { title: "My Profile", href: "/profile", icon: Users },
+      { title: "Settings", href: "/settings", icon: Settings },
       { title: "Logout", href: "/logout", icon: LogOut },
     ],
   };
 
-  // CRM role uses Employee menu + Opportunities
-  const roleMenu = items[role] || items.CUSTOMER || [];
-
-  // For unknown roles (including CRM), default to EMPLOYEE-like nav
-  return roleMenu as MenuItem[];
+  return (items[role] || items.CUSTOMER || []) as MenuItem[];
 };
 
 interface SidebarProps {

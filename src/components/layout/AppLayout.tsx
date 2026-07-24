@@ -111,8 +111,64 @@ export default function AppLayout({ children }: AppLayoutProps) {
         </main>
       </div>
 
+      {/* Phase 13/14 Scroll To Top with Circular Progress Ring */}
+      <ScrollToTopButton />
+
       <CommandPalette />
       <Toaster richColors position="top-right" theme="light" />
     </div>
+  );
+}
+
+function ScrollToTopButton() {
+  const [visible, setVisible] = useState(false);
+  const [scrollProgress, setScrollProgress] = useState(0);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const totalHeight = document.documentElement.scrollHeight - window.innerHeight;
+      const currentScroll = window.scrollY;
+      if (totalHeight > 0) {
+        setScrollProgress((currentScroll / totalHeight) * 100);
+      }
+      setVisible(currentScroll > 200);
+    };
+
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  if (!visible) return null;
+
+  return (
+    <button
+      onClick={scrollToTop}
+      className="fixed bottom-6 right-6 z-50 p-3 bg-stone-900 text-white rounded-full shadow-2xl hover:bg-[#8c3120] transition-all cursor-pointer flex items-center justify-center border border-stone-700"
+      title="Scroll to top"
+    >
+      <svg className="w-5 h-5 -rotate-90" viewBox="0 0 36 36">
+        <path
+          className="text-stone-700"
+          strokeWidth="3"
+          stroke="currentColor"
+          fill="none"
+          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+        />
+        <path
+          className="text-[#e06246]"
+          strokeDasharray={`${scrollProgress}, 100`}
+          strokeWidth="3"
+          strokeLinecap="round"
+          stroke="currentColor"
+          fill="none"
+          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+        />
+      </svg>
+      <span className="absolute text-[10px] font-black">↑</span>
+    </button>
   );
 }

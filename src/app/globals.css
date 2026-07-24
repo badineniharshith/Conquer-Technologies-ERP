@@ -407,6 +407,7 @@ button:active:not([disabled]) {
 /* Staggered entry for Table Rows */
 tbody > tr {
   animation: fade-in-up 0.45s var(--ease-out-expo) both;
+  will-change: transform, opacity;
 }
 tbody > tr:nth-child(1) { animation-delay: 0.02s; }
 tbody > tr:nth-child(2) { animation-delay: 0.04s; }
@@ -417,4 +418,24 @@ tbody > tr:nth-child(6) { animation-delay: 0.12s; }
 tbody > tr:nth-child(7) { animation-delay: 0.14s; }
 tbody > tr:nth-child(8) { animation-delay: 0.16s; }
 tbody > tr:nth-child(n+9) { animation-delay: 0.18s; }
+
+/* ─── Standard Status Badges ──────────────────────────────────────── */
+.status-badge-success {
+  @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200;
+}
+.status-badge-warning {
+  @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200;
+}
+.status-badge-danger {
+  @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200;
+}
+.status-badge-info {
+  @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200;
+}
+
+/* ─── Profile Avatar ──────────────────────────────────────────────── */
+.profile-avatar {
+  @apply w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 shadow-xs transition-transform duration-200 hover:scale-105;
+}
+
 

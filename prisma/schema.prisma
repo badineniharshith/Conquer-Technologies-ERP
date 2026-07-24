@@ -20,6 +20,15 @@ model User {
   status                   String             @default("ACTIVE")
   phone                    String?
   address                  String?
+  employeeId               String?            @unique
+  customerId               String?            @unique
+  gstNumber                String?            @default("")
+  companyName              String?            @default("")
+  department               String?            @default("Supply Chain")
+  designation              String?            @default("Operations Executive")
+  city                     String?            @default("Hyderabad")
+  state                    String?            @default("Telangana")
+  country                  String?            @default("India")
   lastLogin                DateTime?
   currentLoginAt           DateTime?
   lastLoginAt              DateTime?
@@ -28,6 +37,7 @@ model User {
   assignedEmployeeId       String?
   inheritBranchPermissions Boolean            @default(true)
   pagePermissions          String?
+  reportsToId              String?
   notifications            Notification[]
   purchaseOrders           PurchaseOrder[]
   reservations             StockReservation[] @relation("CustomerReservations")
@@ -35,6 +45,9 @@ model User {
   opportunities            Opportunity[]
   assignedEmployee         User?              @relation("EmployeeCustomers", fields: [assignedEmployeeId], references: [id])
   customers                User[]             @relation("EmployeeCustomers")
+  reportsTo                User?              @relation("UserHierarchy", fields: [reportsToId], references: [id])
+  subordinates             User[]             @relation("UserHierarchy")
+  profileRequests          ProfileUpdateRequest[]
   branch                   Branch?            @relation(fields: [branchId], references: [id])
   role                     Role               @relation(fields: [roleId], references: [id])
 
@@ -42,6 +55,8 @@ model User {
   @@index([branchId])
   @@index([status])
   @@index([assignedEmployeeId])
+  @@index([reportsToId])
+  @@index([customerId])
 }
 
 model Role {
@@ -80,6 +95,7 @@ model Product {
   inventories    Inventory[]
   category       Category           @relation(fields: [categoryId], references: [id])
   reservations   StockReservation[]
+  reservationItems StockReservationItem[]
   poItems        PoItem[]
 
   @@index([brand])
@@ -188,12 +204,13 @@ model StockReservation {
   reservationNumber String    @unique
   customerId        String
   employeeId        String?
-  productId         String
-  sku               String
+  productId         String?
+  sku               String?
   branchCode        String    @default("HYD-HQ")
-  quantity          Int
+  quantity          Int?
   status            String    @default("PENDING")
   notes             String?
+  project           String?            @default("Default Project")
   reservedAt        DateTime  @default(now())
   expiresAt         DateTime
   acceptedAt        DateTime?
@@ -202,7 +219,15 @@ model StockReservation {
   updatedAt         DateTime  @updatedAt
   user              User      @relation("CustomerReservations", fields: [customerId], references: [id])
   employee          User?     @relation("EmployeeReservations", fields: [employeeId], references: [id])
-  product           Product   @relation(fields: [productId], references: [id])
+  product           Product?  @relation(fields: [productId], references: [id])
+  items             StockReservationItem[]
+
+  // Phase 18 timestamps
+  verifiedAt        DateTime?
+  processingAt      DateTime?
+  completedAt       DateTime?
+  cancelledAt       DateTime?
+  draftedAt         DateTime?
 
   @@index([customerId])
   @@index([employeeId])
@@ -210,6 +235,25 @@ model StockReservation {
   @@index([status])
   @@index([expiresAt])
   @@index([createdAt])
+}
+
+model StockReservationItem {
+  id            String           @id @default(uuid())
+  reservationId String
+  productId     String
+  sku           String
+  quantity      Int
+  status        String           @default("PENDING")
+  reservedQty   Int              @default(0)
+  shortageQty   Int              @default(0)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  reservation   StockReservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  product       Product          @relation(fields: [productId], references: [id])
+
+  @@index([reservationId])
+  @@index([productId])
 }
 
 model Notification {
@@ -262,7 +306,7 @@ model Opportunity {
   customerId         String
   customerName       String
   companyName        String        @default("")
-  purchaseOrderId    String        @unique
+  purchaseOrderId    String?       @unique
   productDetails     String        @default("[]")
   totalQuantity      Int           @default(0)
   reservationDate    DateTime      @default(now())
@@ -271,8 +315,16 @@ model Opportunity {
   notes              String?
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
-  purchaseOrder      PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  purchaseOrder      PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
   user               User          @relation(fields: [customerId], references: [id])
+
+  // Phase 18 Sync fields
+  reservationId      String?
+  product            String?
+  requestedDeliveryDate DateTime?
+  reservationStatus  String?
+  assignedExecutive  String?
+  branch             String?
 
   @@index([customerId])
   @@index([status])
@@ -318,3 +370,24 @@ model PoItem {
   @@index([sku])
   @@index([itemStatus])
 }
+
+model ProfileUpdateRequest {
+  id               String    @id @default(uuid())
+  userId           String
+  contactPerson    String
+  email            String
+  phone            String
+  companyAddress   String
+  alternateContact String?
+  status           String    @default("PENDING")
+  reviewedBy       String?
+  reviewedAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+}
+

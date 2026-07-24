@@ -614,55 +614,77 @@ export default function DashboardClient({
   }, [reservations, filteredInventory, activeBranchCodes]);
 
   const renderPrimaryKPIRow = () => {
+    const isExecutive = activeRole === "OPERATIONS_EXECUTIVE";
+    const isAsstMgr = activeRole === "ASSISTANT_MANAGER";
+    const isDirector = activeRole === "DIRECTOR_OPERATIONS";
+    const isSuperAdmin = activeRole === "SUPER_ADMIN";
+
     return (
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Inventory Health Score */}
-        <div className="bg-white border border-[#FED7AA] p-5 rounded-2xl shadow-sm flex items-center justify-between">
-          <div className="space-y-1">
-            <span className="text-[10px] text-stone-400 font-bold uppercase tracking-wider block">Inventory Health Score</span>
-            <div className="text-2xl font-black text-stone-900">{healthMetrics.score}%</div>
-            <div className="pt-2">
-              <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase border ${healthMetrics.ratingColor}`}>
-                {healthMetrics.ratingText}
-              </span>
-            </div>
-          </div>
-          <div className="bg-orange-50 p-3.5 rounded-xl text-orange-600 shadow-sm shrink-0">
-            <Activity className="w-6 h-6 animate-pulse" />
-          </div>
-        </div>
-
-        {/* Current Inventory Value (at Cost) */}
-        <div className="bg-white border border-[#FED7AA] p-5 rounded-2xl shadow-sm flex items-center justify-between">
-          <div className="space-y-1">
-            <span className="text-[10px] text-stone-400 font-bold uppercase tracking-wider block">Current Inventory Value (Cost Price)</span>
-            <div className="text-2xl font-black text-stone-900">{inventoryValueMetrics.valStr}</div>
-            <div className="flex space-x-2 pt-1.5 text-[9px] font-bold">
-              <span className="text-emerald-600">Today: {inventoryValueMetrics.changeTodayStr}</span>
-              <span className="text-stone-300">•</span>
-              <span className="text-emerald-600">Month: {inventoryValueMetrics.changeMonthStr}</span>
-            </div>
-          </div>
-          <div className="bg-blue-50 p-3.5 rounded-xl text-blue-600 shadow-sm shrink-0">
-            <DollarSign className="w-6 h-6" />
+      <div className="space-y-4">
+        {/* Phase 12: Dynamic Role Banner */}
+        <div className="p-4 bg-stone-900 border border-stone-800 rounded-2xl flex flex-wrap items-center justify-between text-xs text-stone-300 gap-3 shadow-lg">
+          <div className="flex items-center space-x-3">
+            <span className="px-3 py-1 rounded-lg text-xs font-black bg-[#8c3120] text-white uppercase tracking-wider">
+              {activeRole.replace("_", " ")} VIEW
+            </span>
+            <span className="font-semibold text-stone-200">
+              {isExecutive && "Dashboard: Showing Assigned Customers, Pending Reservations, POs & Upcoming Deadlines"}
+              {isAsstMgr && "Dashboard: Showing Executive Performance, Pending Approvals & Team Reservations"}
+              {isDirector && "Dashboard: Entire Operations Summary, Pending Escalations & Customer Stats"}
+              {isSuperAdmin && "Dashboard: Full System Operations Control & Global Shortage Metrics"}
+            </span>
           </div>
         </div>
 
-        {/* Reserved Stock Overview */}
-        <div className="bg-white border border-[#FED7AA] p-5 rounded-2xl shadow-sm flex items-center justify-between">
-          <div className="space-y-1">
-            <span className="text-[10px] text-stone-400 font-bold uppercase tracking-wider block">Reserved Stock Overview</span>
-            <div className="text-2xl font-black text-stone-900">{reservationMetrics.totalReservedUnits} units</div>
-            <div className="flex space-x-2 pt-1.5 text-[9px] font-bold text-stone-550">
-              <span>Active: {reservationMetrics.pending}</span>
-              <span>•</span>
-              <span className={reservationMetrics.expiringToday > 0 ? "text-orange-655 font-black animate-pulse" : ""}>
-                Expiring Today: {reservationMetrics.expiringToday}
-              </span>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Inventory Health Score */}
+          <div className="bg-white border border-[#FED7AA] p-5 rounded-2xl shadow-sm flex items-center justify-between">
+            <div className="space-y-1">
+              <span className="text-[10px] text-stone-400 font-bold uppercase tracking-wider block">Inventory Health Score</span>
+              <div className="text-2xl font-black text-stone-900">{healthMetrics.score}%</div>
+              <div className="pt-2">
+                <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase border ${healthMetrics.ratingColor}`}>
+                  {healthMetrics.ratingText}
+                </span>
+              </div>
+            </div>
+            <div className="bg-orange-50 p-3.5 rounded-xl text-orange-600 shadow-sm shrink-0">
+              <Activity className="w-6 h-6 animate-pulse" />
             </div>
           </div>
-          <div className="bg-emerald-50 p-3.5 rounded-xl text-emerald-600 shadow-sm shrink-0">
-            <Boxes className="w-6 h-6" />
+
+          {/* Current Inventory Value (at Cost) */}
+          <div className="bg-white border border-[#FED7AA] p-5 rounded-2xl shadow-sm flex items-center justify-between">
+            <div className="space-y-1">
+              <span className="text-[10px] text-stone-400 font-bold uppercase tracking-wider block">Current Inventory Value (Cost Price)</span>
+              <div className="text-2xl font-black text-stone-900">{inventoryValueMetrics.valStr}</div>
+              <div className="flex space-x-2 pt-1.5 text-[9px] font-bold">
+                <span className="text-emerald-600">Today: {inventoryValueMetrics.changeTodayStr}</span>
+                <span className="text-stone-300">•</span>
+                <span className="text-emerald-600">Month: {inventoryValueMetrics.changeMonthStr}</span>
+              </div>
+            </div>
+            <div className="bg-blue-50 p-3.5 rounded-xl text-blue-600 shadow-sm shrink-0">
+              <DollarSign className="w-6 h-6" />
+            </div>
+          </div>
+
+          {/* Reserved Stock Overview */}
+          <div className="bg-white border border-[#FED7AA] p-5 rounded-2xl shadow-sm flex items-center justify-between">
+            <div className="space-y-1">
+              <span className="text-[10px] text-stone-400 font-bold uppercase tracking-wider block">Reserved Stock Overview</span>
+              <div className="text-2xl font-black text-stone-900">{reservationMetrics.totalReservedUnits} units</div>
+              <div className="flex space-x-2 pt-1.5 text-[9px] font-bold text-stone-550">
+                <span>Active: {reservationMetrics.pending}</span>
+                <span>•</span>
+                <span className={reservationMetrics.expiringToday > 0 ? "text-orange-655 font-black animate-pulse" : ""}>
+                  Expiring Today: {reservationMetrics.expiringToday}
+                </span>
+              </div>
+            </div>
+            <div className="bg-emerald-50 p-3.5 rounded-xl text-emerald-600 shadow-sm shrink-0">
+              <Boxes className="w-6 h-6" />
+            </div>
           </div>
         </div>
       </div>
@@ -2292,11 +2314,13 @@ export default function DashboardClient({
   };
 
   // Render based on role
-  switch (activeRole) {
+  switch (activeRole as string) {
     case "SUPER_ADMIN":
       return renderSuperAdmin();
     case "ADMIN":
       return renderAdmin();
+    case "CUSTOMER":
+      return <CustomerPortal products={products} inventory={inventory} prices={prices} />;
     case "SALES_HEAD":
       return renderSalesHead();
     case "REGIONAL_SALES_MANAGER":

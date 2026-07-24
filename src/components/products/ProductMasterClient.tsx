@@ -181,21 +181,14 @@ export default function ProductMasterClient({
     skuStockMap.set(inv.sku, (skuStockMap.get(inv.sku) || 0) + inv.quantity);
   });
 
-  const skuPriceMap = new Map();
-  // Loop default branch pricing first
-  prices.forEach(pr => {
-    skuPriceMap.set(pr.sku, pr.sellingPrice);
-  });
-  // Overlay HYD-HQ price so it takes preference
-  prices.forEach(pr => {
-    if (pr.branchCode === "HYD-HQ") {
-      skuPriceMap.set(pr.sku, pr.sellingPrice);
-    }
-  });
+  const userBranchCode = activeUser?.branch || "HYD-HQ";
 
-  // Helper functions for filtering
-  const getProductStock = (sku: string) => skuStockMap.get(sku) || 0;
-  const getProductPrice = (sku: string) => skuPriceMap.get(sku) || 0;
+  const getProductPrice = (sku: string) => {
+    const branchMatch = prices.find((pr: any) => pr.sku === sku && pr.branchCode === userBranchCode);
+    if (branchMatch) return branchMatch.sellingPrice || branchMatch.costPrice;
+    const defaultMatch = prices.find((pr: any) => pr.sku === sku && pr.branchCode === "HYD-HQ") || prices.find((pr: any) => pr.sku === sku);
+    return defaultMatch ? (defaultMatch.sellingPrice || defaultMatch.costPrice) : 0;
+  };
 
   const predictionsList = predictions || [];
   const trendingSkus = useMemo(() => predictionsList.slice(0, 5).map(p => p.sku), [predictionsList]);
@@ -580,18 +573,22 @@ export default function ProductMasterClient({
                 />
               </div>
 
-              <div>
-                <label className="block text-[9px] font-bold text-stone-400 uppercase tracking-wider mb-1">Availability</label>
-                <SearchableDropdown
-                  options={[
-                    { value: "All", label: "All Availability" },
-                    { value: "In Stock", label: "In Stock" },
-                    { value: "Out of Stock", label: "Out of Stock" }
-                  ]}
-                  value={selectedAvailability}
-                  onChange={(val) => updateFilters({ availability: val })}
-                />
-              </div>
+              {activeRole !== "CUSTOMER" ? (
+                <div>
+                  <label className="block text-[9px] font-bold text-stone-400 uppercase tracking-wider mb-1">Availability</label>
+                  <SearchableDropdown
+                    options={[
+                      { value: "All", label: "All Availability" },
+                      { value: "In Stock", label: "In Stock" },
+                      { value: "Out of Stock", label: "Out of Stock" }
+                    ]}
+                    value={selectedAvailability}
+                    onChange={(val) => updateFilters({ availability: val })}
+                  />
+                </div>
+              ) : (
+                <div className="hidden sm:block"></div>
+              )}
 
               <div>
                 <label className="block text-[9px] font-bold text-stone-400 uppercase tracking-wider mb-1">Status</label>
@@ -621,27 +618,27 @@ export default function ProductMasterClient({
               </div>
             </div>
           </div>
-
-          <div className="glass-panel overflow-x-auto bg-white border border-[#fed7aa] rounded-2xl shadow-sm">
-            <table className="w-full text-xs text-left border-collapse">
-              <thead>
-                <tr className="bg-stone-50 text-stone-500 font-semibold uppercase tracking-wider border-b border-stone-200">
-                  <th className="px-6 py-3">SKU</th>
-                  <th className="px-6 py-3">Product Name</th>
-                  <th className="px-6 py-3">Brand</th>
-                  <th className="px-6 py-3">Category</th>
-                  <th className="px-6 py-3">Barcode</th>
-                  <th className="px-6 py-3 text-right">Safety Stock</th>
-                  <th className="px-6 py-3 text-right">Reorder Level</th>
-                  {activeRole !== "CUSTOMER" && <th className="px-6 py-3 text-center">Serial Tracking</th>}
-                  <th className="px-6 py-3 text-center">Status</th>
-                  {activeRole === "CUSTOMER" && <th className="px-6 py-3 text-center">Action</th>}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-stone-100">
-                {paginatedProducts.map((p) => (
-                  <tr key={p.id} className="hover:bg-stone-50/50 transition-colors">
-                    <td className="px-6 py-4 font-mono font-bold text-orange-600">
+ 
+           <div className="glass-panel overflow-x-auto bg-white border border-[#fed7aa] rounded-2xl shadow-sm">
+             <table className="w-full text-xs text-left border-collapse">
+               <thead>
+                 <tr className="bg-stone-50 text-stone-500 font-semibold uppercase tracking-wider border-b border-stone-200">
+                   <th className="px-6 py-3">SKU</th>
+                   <th className="px-6 py-3">Product Name</th>
+                   <th className="px-6 py-3">Brand</th>
+                   <th className="px-6 py-3">Category</th>
+                   <th className="px-6 py-3">Barcode</th>
+                   {activeRole !== "CUSTOMER" && <th className="px-6 py-3 text-right">Safety Stock</th>}
+                   {activeRole !== "CUSTOMER" && <th className="px-6 py-3 text-right">Reorder Level</th>}
+                   {activeRole !== "CUSTOMER" && <th className="px-6 py-3 text-center">Serial Tracking</th>}
+                   <th className="px-6 py-3 text-center">Status</th>
+                   {activeRole === "CUSTOMER" && <th className="px-6 py-3 text-center">Action</th>}
+                 </tr>
+               </thead>
+               <tbody className="divide-y divide-stone-100">
+                 {paginatedProducts.map((p) => (
+                   <tr key={p.id} className="hover:bg-stone-50/50 transition-colors">
+                     <td className="px-6 py-4 font-mono font-bold text-orange-600">
                       {highlightText(p.sku, queryToHighlight)}
                     </td>
                     <td className="px-6 py-4 font-semibold text-stone-850">
@@ -662,8 +659,8 @@ export default function ProductMasterClient({
                         <span>{p.barcode || "N/A"}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-right font-semibold text-stone-500">{p.safetyStock} units</td>
-                    <td className="px-6 py-4 text-right font-bold text-stone-700">{p.reorderLevel} units</td>
+                    {activeRole !== "CUSTOMER" && <td className="px-6 py-4 text-right font-semibold text-stone-500">{p.safetyStock} units</td>}
+                    {activeRole !== "CUSTOMER" && <td className="px-6 py-4 text-right font-bold text-stone-700">{p.reorderLevel} units</td>}
                     {activeRole !== "CUSTOMER" && (
                       <td className="px-6 py-4 text-center">
                         <button
@@ -811,9 +808,9 @@ export default function ProductMasterClient({
                         <option 
                           key={inv.branchCode} 
                           value={inv.branchCode}
-                          disabled={freeStock <= 0}
+                          disabled={activeRole === "CUSTOMER" ? false : freeStock <= 0}
                         >
-                          {branchText} ({freeStock > 0 ? `${freeStock} available` : 'Out of Stock'})
+                          {branchText} {activeRole === "CUSTOMER" ? "" : `(${freeStock > 0 ? `${freeStock} available` : 'Out of Stock'})`}
                         </option>
                       );
                     })}
@@ -828,16 +825,27 @@ export default function ProductMasterClient({
 
                 return (
                   <div>
-                    <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-wider mb-1.5">Quantity to Lock (Max: {freeStock})</label>
+                    <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-wider mb-1.5">
+                      {activeRole === "CUSTOMER" ? "Quantity" : `Quantity to Lock (Max: ${freeStock})`}
+                    </label>
                     <input
                       type="number"
                       min={1}
-                      max={freeStock}
+                      max={activeRole === "CUSTOMER" ? undefined : freeStock}
                       value={reserveQuantity}
-                      onChange={(e) => setReserveQuantity(Math.max(1, Math.min(freeStock, Number(e.target.value))))}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        if (activeRole === "CUSTOMER") {
+                          setReserveQuantity(Math.max(1, val));
+                        } else {
+                          setReserveQuantity(Math.max(1, Math.min(freeStock, val)));
+                        }
+                      }}
                       className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg outline-none text-stone-850 focus:border-orange-500 focus:bg-white font-semibold"
                     />
-                    <span className="text-[10px] text-stone-400 block mt-1">This stock will be locked for your account for exactly 14 days.</span>
+                    <span className="text-[10px] text-stone-400 block mt-1">
+                      A reservation deadline will be calculated automatically based on stock availability (3 days for full stock, 7 days for partial stock, 14 days if procurement is needed).
+                    </span>
                   </div>
                 );
               })()}

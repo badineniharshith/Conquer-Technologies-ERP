@@ -18,11 +18,13 @@ interface MockDbState {
   productPrices: any[];
   productPriceHistory: any[];
   stockReservations: any[];
+  stockReservationItems: any[];
   notifications: any[];
   purchaseOrders: any[];
   opportunities: any[];
   vendors: any[];
   poItems: any[];
+  profileUpdateRequests: any[];
 }
 
 const hashPassword = (plain: string) => bcrypt.hashSync(plain, 10);
@@ -35,15 +37,15 @@ const initialRoles = [
 ];
 
 const initialUsers = [
-  { id: "u-superadmin", name: "Corporate Super Admin", email: "superadmin@conquererp.com", passwordHash: hashPassword("Admin@2026#Secure"), roleId: "SUPER_ADMIN", branch: "Head Office", status: "ACTIVE" },
-  { id: "u-admin", name: "System Admin", email: "admin@conquererp.com", passwordHash: hashPassword("Admin@2026"), roleId: "ADMIN", branch: "Head Office", status: "ACTIVE" },
-  { id: "u-saleshead", name: "Global Sales Head", email: "saleshead@conquererp.com", passwordHash: hashPassword("SalesHead@2026"), roleId: "EMPLOYEE", branch: "Head Office", status: "ACTIVE" },
-  { id: "u-rsm-south", name: "Regional Manager South", email: "rsm.south@conquererp.com", passwordHash: hashPassword("RSM@South2026"), roleId: "EMPLOYEE", branch: "Head Office", status: "ACTIVE" },
-  { id: "u-bm-hyd", name: "Hyderabad Branch Manager", email: "bm.hyd@conquererp.com", passwordHash: hashPassword("BM@Hyd2026"), roleId: "EMPLOYEE", branch: "Hyderabad Corporate Office", status: "ACTIVE" },
-  { id: "u-salesmgr", name: "Sales Manager HYD", email: "manager.hyd@conquererp.com", passwordHash: hashPassword("Manager@Hyd2026"), roleId: "EMPLOYEE", branch: "Hyderabad Corporate Office", status: "ACTIVE" },
-  { id: "u-exec-hyd", name: "Sales Executive HYD", email: "exec.hyd@conquererp.com", passwordHash: hashPassword("Exec@Hyd#2026"), roleId: "EMPLOYEE", branch: "Hyderabad Corporate Office", status: "ACTIVE" },
-  { id: "u-employee-generic", name: "Company Employee", email: "employee@conquererp.com", passwordHash: hashPassword("Employee@2026"), roleId: "EMPLOYEE", branch: "Hyderabad Corporate Office", status: "ACTIVE" },
-  { id: "u-customer", name: "Premium Customer", email: "customer@gmail.com", passwordHash: hashPassword("Customer#2026"), roleId: "CUSTOMER", branch: "None", status: "ACTIVE", assignedEmployeeId: "u-salesmgr" }
+  { id: "u-superadmin", name: "Corporate Super Admin", email: "superadmin@conquererp.com", passwordHash: hashPassword("Admin@123"), roleId: "SUPER_ADMIN", branch: "Head Office", status: "ACTIVE" },
+  { id: "u-admin", name: "System Admin", email: "admin@conquererp.com", passwordHash: hashPassword("Admin@123"), roleId: "ADMIN", branch: "Head Office", status: "ACTIVE" },
+  { id: "u-saleshead", name: "Global Sales Head", email: "saleshead@conquererp.com", passwordHash: hashPassword("Admin@123"), roleId: "EMPLOYEE", branch: "Head Office", status: "ACTIVE" },
+  { id: "u-rsm-south", name: "Regional Manager South", email: "rsm.south@conquererp.com", passwordHash: hashPassword("Admin@123"), roleId: "EMPLOYEE", branch: "Head Office", status: "ACTIVE" },
+  { id: "u-bm-hyd", name: "Hyderabad Branch Manager", email: "bm.hyd@conquererp.com", passwordHash: hashPassword("Admin@123"), roleId: "EMPLOYEE", branch: "Hyderabad Corporate Office", status: "ACTIVE" },
+  { id: "u-salesmgr", name: "Sales Manager HYD", email: "manager.hyd@conquererp.com", passwordHash: hashPassword("Admin@123"), roleId: "EMPLOYEE", branch: "Hyderabad Corporate Office", status: "ACTIVE" },
+  { id: "u-exec-hyd", name: "Sales Executive HYD", email: "exec.hyd@conquererp.com", passwordHash: hashPassword("Admin@123"), roleId: "EMPLOYEE", branch: "Hyderabad Corporate Office", status: "ACTIVE" },
+  { id: "u-employee-generic", name: "Company Employee", email: "employee@conquererp.com", passwordHash: hashPassword("Admin@123"), roleId: "EMPLOYEE", branch: "Hyderabad Corporate Office", status: "ACTIVE" },
+  { id: "u-customer", name: "Premium Customer", email: "customer@gmail.com", passwordHash: hashPassword("Admin@123"), roleId: "CUSTOMER", branch: "None", status: "ACTIVE", assignedEmployeeId: "u-salesmgr" }
 ];
 
 import { generateLargeDatabase } from "./largeCatalog";
@@ -91,6 +93,7 @@ if (!globalForMockDb.mockDb) {
     productPrices: initialProductPrices,
     productPriceHistory: initialProductPriceHistory,
     stockReservations: [],
+    stockReservationItems: [],
     notifications: [],
     purchaseOrders: [
       { id: "po-1", poNumber: "PO-2026-001", customerId: "u-customer", customerName: "Premium Customer", companyName: "Premium Corp", dateReceived: new Date("2026-07-01"), expectedDelivery: new Date("2026-07-15"), totalItems: 3, stockStatus: "Checking", verificationStatus: "Pending", verifiedBy: null, verifiedDate: null, branchCode: "HYD-HQ", itemsJson: JSON.stringify([{ sku: "LAP-APP-962657", quantity: 2 }, { sku: "LAP-HP-172551", quantity: 1 }]) },
@@ -106,6 +109,7 @@ if (!globalForMockDb.mockDb) {
       { id: "v-005", name: "Prime Components India", contactPerson: "Arjun Reddy", email: "arjun@primecomponents.in", phone: "+91 98760 55555", address: "Road No. 2, Banjara Hills, Hyderabad, Telangana 500034", gstNumber: "36AABCP7890V5ZY", status: "ACTIVE", createdAt: new Date(), updatedAt: new Date() }
     ],
     poItems: [],
+    profileUpdateRequests: [],
   };
 }
 
@@ -113,6 +117,30 @@ const mockStore = globalForMockDb.mockDb;
 
 const isDatabaseConnected = () => {
   return !!process.env.DATABASE_URL;
+};
+
+const normalizePoRecord = (po: any) => {
+  if (!po) return null;
+  return {
+    id: String(po.id),
+    poNumber: po.poNumber || po.po_number || "PO-UNKNOWN",
+    customerId: String(po.customerId || po.customer_id || ""),
+    customerName: po.customerName || po.primary_contact_name || po.customer_name || "Customer",
+    companyName: po.companyName || po.company_name || "",
+    vendorId: po.vendorId || po.vendor_id || null,
+    totalAmount: po.totalAmount !== undefined ? Number(po.totalAmount) : (po.grandTotal !== undefined ? Number(po.grandTotal) : Number(po.total_amount || 0)),
+    dateReceived: po.dateReceived || po.created_at || po.date_received || new Date(),
+    expectedDelivery: po.expectedDelivery || po.expected_delivery || null,
+    totalItems: Number(po.totalItems || po.total_items || 1),
+    stockStatus: po.stockStatus || po.stock_status || "Checking",
+    verificationStatus: po.verificationStatus || po.erp_verification_status || po.po_status || "Pending",
+    verifiedBy: po.verifiedBy || po.verified_by_id || null,
+    verifiedDate: po.verifiedDate || po.verified_at || null,
+    branchCode: po.branchCode || po.branch_code || "HYD-HQ",
+    itemsJson: po.itemsJson || po.items_json || "[]",
+    user: po.user || null,
+    vendor: po.vendor || null
+  };
 };
 
 const mapDbUser = (user: any) => {
@@ -499,20 +527,24 @@ export const erpDb = {
       if (isDatabaseConnected()) {
         return await (prisma as any).stockReservation.findMany({
           ...args,
-          include: { user: true, product: true }
+          include: { user: true, product: true, items: { include: { product: true } } }
         });
       }
       return mockFindMany("stockReservations", args).map(res => ({
         ...res,
         user: mockStore.users.find(u => u.id === res.customerId),
-        product: mockStore.products.find(p => p.id === res.productId)
+        product: mockStore.products.find(p => p.id === res.productId),
+        items: mockStore.stockReservationItems.filter(item => item.reservationId === res.id).map(item => ({
+          ...item,
+          product: mockStore.products.find(p => p.id === item.productId)
+        }))
       }));
     },
     findUnique: async (args: { where: { id: string } }) => {
       if (isDatabaseConnected()) {
         return await (prisma as any).stockReservation.findUnique({
           where: { id: args.where.id },
-          include: { user: true, product: true }
+          include: { user: true, product: true, items: { include: { product: true } } }
         });
       }
       const res = mockStore.stockReservations.find(x => x.id === args.where.id);
@@ -520,14 +552,18 @@ export const erpDb = {
       return {
         ...res,
         user: mockStore.users.find(u => u.id === res.customerId),
-        product: mockStore.products.find(p => p.id === res.productId)
+        product: mockStore.products.find(p => p.id === res.productId),
+        items: mockStore.stockReservationItems.filter(item => item.reservationId === res.id).map(item => ({
+          ...item,
+          product: mockStore.products.find(p => p.id === item.productId)
+        }))
       };
     },
     create: async (args: { data: any }) => {
       if (isDatabaseConnected()) {
         return await (prisma as any).stockReservation.create({
           data: args.data,
-          include: { user: true, product: true }
+          include: { user: true, product: true, items: { include: { product: true } } }
         });
       }
       const item = { id: `res-${Date.now()}`, createdAt: new Date(), ...args.data };
@@ -535,7 +571,11 @@ export const erpDb = {
       return {
         ...item,
         user: mockStore.users.find(u => u.id === item.customerId),
-        product: mockStore.products.find(p => p.id === item.productId)
+        product: mockStore.products.find(p => p.id === item.productId),
+        items: mockStore.stockReservationItems.filter(x => x.reservationId === item.id).map(x => ({
+          ...x,
+          product: mockStore.products.find(p => p.id === x.productId)
+        }))
       };
     },
     update: async (args: { where: { id: string }; data: any }) => {
@@ -543,7 +583,7 @@ export const erpDb = {
         return await (prisma as any).stockReservation.update({
           where: { id: args.where.id },
           data: args.data,
-          include: { user: true, product: true }
+          include: { user: true, product: true, items: { include: { product: true } } }
         });
       }
       const idx = mockStore.stockReservations.findIndex(x => x.id === args.where.id);
@@ -553,8 +593,94 @@ export const erpDb = {
       return {
         ...item,
         user: mockStore.users.find(u => u.id === item.customerId),
+        product: mockStore.products.find(p => p.id === item.productId),
+        items: mockStore.stockReservationItems.filter(x => x.reservationId === item.id).map(x => ({
+          ...x,
+          product: mockStore.products.find(p => p.id === x.productId)
+        }))
+      };
+    }
+  },
+
+  stockReservationItems: {
+    findMany: async (args?: any) => {
+      if (isDatabaseConnected()) {
+        return await (prisma as any).stockReservationItem.findMany(args);
+      }
+      return mockFindMany("stockReservationItems", args).map(item => ({
+        ...item,
+        product: mockStore.products.find(p => p.id === item.productId)
+      }));
+    },
+    findUnique: async (args: { where: { id: string } }) => {
+      if (isDatabaseConnected()) {
+        return await (prisma as any).stockReservationItem.findUnique(args);
+      }
+      const item = mockStore.stockReservationItems.find(x => x.id === args.where.id);
+      if (!item) return null;
+      return {
+        ...item,
         product: mockStore.products.find(p => p.id === item.productId)
       };
+    },
+    findFirst: async (args?: any) => {
+      if (isDatabaseConnected()) {
+        return await (prisma as any).stockReservationItem.findFirst(args);
+      }
+      const list = mockFindMany("stockReservationItems", args);
+      if (list.length === 0) return null;
+      const item = list[0];
+      return {
+        ...item,
+        product: mockStore.products.find(p => p.id === item.productId)
+      };
+    },
+    create: async (args: { data: any }) => {
+      if (isDatabaseConnected()) {
+        return await (prisma as any).stockReservationItem.create(args);
+      }
+      const item = { id: `resitem-${Date.now()}-${Math.floor(Math.random() * 1000)}`, createdAt: new Date(), ...args.data };
+      mockStore.stockReservationItems.push(item);
+      return {
+        ...item,
+        product: mockStore.products.find(p => p.id === item.productId)
+      };
+    },
+    update: async (args: { where: { id: string }; data: any }) => {
+      if (isDatabaseConnected()) {
+        return await (prisma as any).stockReservationItem.update(args);
+      }
+      const idx = mockStore.stockReservationItems.findIndex(x => x.id === args.where.id);
+      if (idx === -1) throw new Error("StockReservationItem not found");
+      mockStore.stockReservationItems[idx] = { ...mockStore.stockReservationItems[idx], ...args.data, updatedAt: new Date() };
+      const item = mockStore.stockReservationItems[idx];
+      return {
+        ...item,
+        product: mockStore.products.find(p => p.id === item.productId)
+      };
+    },
+    delete: async (args: { where: { id: string } }) => {
+      if (isDatabaseConnected()) {
+        return await (prisma as any).stockReservationItem.delete(args);
+      }
+      const idx = mockStore.stockReservationItems.findIndex(x => x.id === args.where.id);
+      if (idx === -1) throw new Error("StockReservationItem not found");
+      const item = mockStore.stockReservationItems[idx];
+      mockStore.stockReservationItems.splice(idx, 1);
+      return item;
+    },
+    deleteMany: async (args?: any) => {
+      if (isDatabaseConnected()) {
+        return await (prisma as any).stockReservationItem.deleteMany(args);
+      }
+      if (args?.where?.reservationId) {
+        mockStore.stockReservationItems = mockStore.stockReservationItems.filter(x => x.reservationId !== args.where.reservationId);
+      } else if (args?.where?.id) {
+        mockStore.stockReservationItems = mockStore.stockReservationItems.filter(x => x.id !== args.where.id);
+      } else {
+        mockStore.stockReservationItems = [];
+      }
+      return { count: mockStore.stockReservationItems.length };
     }
   },
 
@@ -586,57 +712,114 @@ export const erpDb = {
       return mockStore.notifications[idx];
     }
   },
+
   purchaseOrders: {
     findMany: async (args?: any) => {
       if (isDatabaseConnected()) {
-        const queryArgs = { ...args };
-        if (!queryArgs.select) {
-          queryArgs.include = { user: true, ...(queryArgs.include || {}) };
+        try {
+          const rawPos: any[] = await prisma.$queryRawUnsafe(`
+            SELECT * FROM "public"."purchase_orders" 
+            ORDER BY created_at DESC;
+          `);
+          if (rawPos && rawPos.length > 0) {
+            return rawPos.map(normalizePoRecord);
+          }
+        } catch (e) {
+          // Fallback to Prisma if raw table fails
         }
-        return await (prisma as any).purchaseOrder.findMany(queryArgs);
+        try {
+          const dbPos = await (prisma as any).purchaseOrder.findMany(args);
+          return dbPos.map(normalizePoRecord);
+        } catch (e) {
+          // Fallback
+        }
       }
       let items = mockFindMany("purchaseOrders", args);
       return items.map((po: any) => ({
-        ...po,
+        ...normalizePoRecord(po),
         user: mockStore.users.find(u => u.id === po.customerId)
       }));
     },
     findUnique: async (args: { where: { id?: string; poNumber?: string } }) => {
       if (isDatabaseConnected()) {
-        return await (prisma as any).purchaseOrder.findUnique({
-          where: args.where as any,
-          include: { user: true }
-        });
+        try {
+          if (args.where.poNumber) {
+            const rawPos: any[] = await prisma.$queryRawUnsafe(`
+              SELECT * FROM "public"."purchase_orders" 
+              WHERE po_number = $1 OR customer_po_number = $1
+              LIMIT 1;
+            `, args.where.poNumber);
+            if (rawPos && rawPos.length > 0) {
+              return normalizePoRecord(rawPos[0]);
+            }
+          }
+          if (args.where.id) {
+            const rawPos: any[] = await prisma.$queryRawUnsafe(`
+              SELECT * FROM "public"."purchase_orders" 
+              WHERE id::text = $1 OR po_number = $1
+              LIMIT 1;
+            `, args.where.id);
+            if (rawPos && rawPos.length > 0) {
+              return normalizePoRecord(rawPos[0]);
+            }
+          }
+        } catch (e) {}
+
+        try {
+          const dbPo = await (prisma as any).purchaseOrder.findUnique({
+            where: args.where as any,
+            include: { user: true }
+          });
+          return normalizePoRecord(dbPo);
+        } catch (e) {}
       }
       if (args.where.id) {
         const found = mockStore.purchaseOrders.find(po => po.id === args.where.id) || null;
         if (!found) return null;
-        return { ...found, user: mockStore.users.find(u => u.id === found.customerId) };
+        return normalizePoRecord({ ...found, user: mockStore.users.find(u => u.id === found.customerId) });
       }
       if (args.where.poNumber) {
         const found = mockStore.purchaseOrders.find(po => po.poNumber === args.where.poNumber) || null;
         if (!found) return null;
-        return { ...found, user: mockStore.users.find(u => u.id === found.customerId) };
+        return normalizePoRecord({ ...found, user: mockStore.users.find(u => u.id === found.customerId) });
       }
       return null;
     },
     create: async (args: { data: any }) => {
       if (isDatabaseConnected()) {
-        return await (prisma as any).purchaseOrder.create({ data: args.data, include: { user: true } });
+        try {
+          return await (prisma as any).purchaseOrder.create({ data: args.data, include: { user: true } });
+        } catch (e) {}
       }
       const item = { id: `po-${Date.now()}`, dateReceived: new Date(), companyName: "", verifiedBy: null, verifiedDate: null, ...args.data };
       mockStore.purchaseOrders.push(item);
-      return { ...item, user: mockStore.users.find(u => u.id === item.customerId) };
+      return normalizePoRecord({ ...item, user: mockStore.users.find(u => u.id === item.customerId) });
     },
     update: async (args: { where: { id: string }; data: any }) => {
       if (isDatabaseConnected()) {
-        return await (prisma as any).purchaseOrder.update({ where: { id: args.where.id }, data: args.data, include: { user: true } });
+        try {
+          // Update snake_case purchase_orders in database
+          if (args.data.verificationStatus || args.data.stockStatus) {
+            await prisma.$queryRawUnsafe(`
+              UPDATE "public"."purchase_orders"
+              SET erp_verification_status = $1, po_status = $1
+              WHERE id::text = $2 OR po_number = $2;
+            `, args.data.verificationStatus || "Verified", args.where.id);
+          }
+        } catch (e) {}
+
+        try {
+          const updated = await (prisma as any).purchaseOrder.update({ where: { id: args.where.id }, data: args.data, include: { user: true } });
+          return normalizePoRecord(updated);
+        } catch (e) {}
       }
       const idx = mockStore.purchaseOrders.findIndex(x => x.id === args.where.id);
-      if (idx === -1) throw new Error("PurchaseOrder not found");
-      mockStore.purchaseOrders[idx] = { ...mockStore.purchaseOrders[idx], ...args.data };
-      const po = mockStore.purchaseOrders[idx];
-      return { ...po, user: mockStore.users.find(u => u.id === po.customerId) };
+      if (idx !== -1) {
+        mockStore.purchaseOrders[idx] = { ...mockStore.purchaseOrders[idx], ...args.data };
+        const po = mockStore.purchaseOrders[idx];
+        return normalizePoRecord({ ...po, user: mockStore.users.find(u => u.id === po.customerId) });
+      }
+      return null;
     }
   },
 
@@ -789,14 +972,54 @@ export const erpDb = {
       return { count };
     },
     deleteMany: async (args: { where: any }) => {
-      if (isDatabaseConnected()) {
-        return await (prisma as any).poItem.deleteMany({ where: args.where });
-      }
       const before = mockStore.poItems.length;
       mockStore.poItems = mockStore.poItems.filter(p => {
         return !Object.entries(args.where).every(([k, v]) => p[k] === v);
       });
       return { count: before - mockStore.poItems.length };
+    }
+  },
+
+  profileUpdateRequests: {
+    findMany: async (args?: any) => {
+      if (isDatabaseConnected()) {
+        return await (prisma as any).profileUpdateRequest.findMany({
+          ...args,
+          include: { user: true, ...(args?.include || {}) }
+        });
+      }
+      return mockFindMany("profileUpdateRequests", args).map((req: any) => ({
+        ...req,
+        user: mockStore.users.find(u => u.id === req.userId)
+      }));
+    },
+    findUnique: async (args: { where: { id: string } }) => {
+      if (isDatabaseConnected()) {
+        return await (prisma as any).profileUpdateRequest.findUnique({
+          where: args.where,
+          include: { user: true }
+        });
+      }
+      const found = mockStore.profileUpdateRequests.find(r => r.id === args.where.id);
+      if (!found) return null;
+      return { ...found, user: mockStore.users.find(u => u.id === found.userId) };
+    },
+    create: async (args: { data: any }) => {
+      if (isDatabaseConnected()) {
+        return await (prisma as any).profileUpdateRequest.create({ data: args.data });
+      }
+      const item = { id: `pur-${Date.now()}`, createdAt: new Date(), updatedAt: new Date(), status: "PENDING", ...args.data };
+      mockStore.profileUpdateRequests.push(item);
+      return item;
+    },
+    update: async (args: { where: { id: string }; data: any }) => {
+      if (isDatabaseConnected()) {
+        return await (prisma as any).profileUpdateRequest.update({ where: args.where, data: args.data });
+      }
+      const idx = mockStore.profileUpdateRequests.findIndex(r => r.id === args.where.id);
+      if (idx === -1) throw new Error("ProfileUpdateRequest not found");
+      mockStore.profileUpdateRequests[idx] = { ...mockStore.profileUpdateRequests[idx], ...args.data, updatedAt: new Date() };
+      return mockStore.profileUpdateRequests[idx];
     }
   }
 };

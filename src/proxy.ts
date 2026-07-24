@@ -11,8 +11,29 @@ import { erpDb } from "@/lib/db";
 // ============================================================
 
 // Three access levels. Every other role key maps to one of these.
-const LEVEL_1_ROLES = ["SUPER_ADMIN", "ADMIN"];
-const LEVEL_2_ROLES = ["EMPLOYEE", "SALES_HEAD", "REGIONAL_SALES_MANAGER", "BRANCH_MANAGER", "SALES_MANAGER", "SALES_EXECUTIVE", "REGIONAL_OFFICER", "BRANCH_USER", "VIEWER", "REGIONAL_MANAGER", "INVENTORY_MANAGER", "PURCHASE_MANAGER", "LOGISTICS_MANAGER", "ACCOUNTS_MANAGER"];
+const LEVEL_1_ROLES = ["SUPER_ADMIN", "ADMIN", "DIRECTOR_OPERATIONS", "DIRECTOR"];
+const LEVEL_2_ROLES = [
+  "OPERATIONS_MANAGER",
+  "ASSISTANT_MANAGER",
+  "OPERATIONS_EXECUTIVE",
+  "MANAGER",
+  "ASST_MGR",
+  "EXECUTIVE",
+  "EMPLOYEE",
+  "SALES_HEAD",
+  "REGIONAL_SALES_MANAGER",
+  "BRANCH_MANAGER",
+  "SALES_MANAGER",
+  "SALES_EXECUTIVE",
+  "REGIONAL_OFFICER",
+  "BRANCH_USER",
+  "VIEWER",
+  "REGIONAL_MANAGER",
+  "INVENTORY_MANAGER",
+  "PURCHASE_MANAGER",
+  "LOGISTICS_MANAGER",
+  "ACCOUNTS_MANAGER"
+];
 const LEVEL_3_ROLES = ["CUSTOMER"];
 
 function getLevel(role: string): 1 | 2 | 3 {
@@ -35,16 +56,27 @@ const LEVEL_ROUTES: Record<1 | 2 | 3, string[]> = {
     "/settings",
     "/reserved-stock",
     "/purchase-orders",
+    "/opportunities",
+    "/employees",
+    "/recommendations",
+    "/profile",
   ],
   2: [
     "/dashboard",
     "/products",
+    "/categories",
     "/pricing",
     "/price-history",
     "/stock-movement",
     "/analytics",
+    "/admin",
+    "/settings",
     "/reserved-stock",
     "/purchase-orders",
+    "/opportunities",
+    "/employees",
+    "/recommendations",
+    "/profile",
   ],
   3: [
     "/dashboard",
@@ -53,6 +85,9 @@ const LEVEL_ROUTES: Record<1 | 2 | 3, string[]> = {
     "/recommendations",
     "/reserved-stock",
     "/purchase-orders",
+    "/opportunities",
+    "/profile",
+    "/settings",
   ],
 };
 
