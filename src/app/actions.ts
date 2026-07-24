@@ -2307,11 +2307,14 @@ export async function verifyPurchaseOrderAction(poId: string) {
 export async function lookupPurchaseOrderByNumberAction(poNumber: string) {
   try {
     const pos = await erpDb.purchaseOrders.findMany();
-    const po = pos.find((p: any) => p.poNumber.toLowerCase() === poNumber.toLowerCase().trim());
+    const po = pos.find((p: any) =>
+      (p.poNumber || p.po_number || "").toLowerCase() === poNumber.toLowerCase().trim() ||
+      (p.customer_po_number || "").toLowerCase() === poNumber.toLowerCase().trim()
+    );
     if (!po) {
       return { found: false };
     }
-    const user = await erpDb.users.findUnique({ where: { id: po.customerId } });
+    const user = po.customerId ? await erpDb.users.findUnique({ where: { id: po.customerId } }) : null;
     let items: { sku: string; quantity: number }[] = [];
     try {
       items = JSON.parse(po.itemsJson || "[]");
@@ -2321,19 +2324,19 @@ export async function lookupPurchaseOrderByNumberAction(poNumber: string) {
       found: true,
       po: {
         id: po.id,
-        poNumber: po.poNumber,
+        poNumber: po.poNumber || po.po_number,
         customerId: po.customerId,
-        customerName: po.customerName,
-        companyName: po.companyName || "",
-        branchCode: po.branchCode,
-        dateReceived: po.dateReceived,
-        expectedDelivery: po.expectedDelivery,
-        verificationStatus: po.verificationStatus,
-        stockStatus: po.stockStatus,
+        customerName: po.customerName || po.primary_contact_name || user?.name || "Customer",
+        companyName: po.companyName || po.company_name || user?.companyName || "",
+        branchCode: po.branchCode || po.branch_code || "HYD-HQ",
+        dateReceived: po.dateReceived || po.created_at,
+        expectedDelivery: po.expectedDelivery ? new Date(po.expectedDelivery).toISOString().split("T")[0] : "",
+        verificationStatus: po.verificationStatus || po.erp_verification_status || "Pending",
+        stockStatus: po.stockStatus || po.stock_status || "Checking",
         items,
-        totalItems: po.totalItems,
-        customerPhone: user?.phone || "",
-        customerEmail: user?.email || ""
+        totalItems: items.length || po.totalItems || 1,
+        customerPhone: po.phone || user?.phone || "",
+        customerEmail: po.email || user?.email || ""
       }
     };
   } catch (err: any) {
@@ -2585,4 +2588,5 @@ export async function reviewProfileUpdateRequestAction(data: {
     return { success: false, error: err.message || "Failed to process review" };
   }
 }
+
 

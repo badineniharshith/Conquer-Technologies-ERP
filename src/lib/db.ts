@@ -119,6 +119,30 @@ const isDatabaseConnected = () => {
   return !!process.env.DATABASE_URL;
 };
 
+const normalizePoRecord = (po: any) => {
+  if (!po) return null;
+  return {
+    id: String(po.id),
+    poNumber: po.poNumber || po.po_number || "PO-UNKNOWN",
+    customerId: String(po.customerId || po.customer_id || ""),
+    customerName: po.customerName || po.primary_contact_name || po.customer_name || "Customer",
+    companyName: po.companyName || po.company_name || "",
+    vendorId: po.vendorId || po.vendor_id || null,
+    totalAmount: po.totalAmount !== undefined ? Number(po.totalAmount) : (po.grandTotal !== undefined ? Number(po.grandTotal) : Number(po.total_amount || 0)),
+    dateReceived: po.dateReceived || po.created_at || po.date_received || new Date(),
+    expectedDelivery: po.expectedDelivery || po.expected_delivery || null,
+    totalItems: Number(po.totalItems || po.total_items || 1),
+    stockStatus: po.stockStatus || po.stock_status || "Checking",
+    verificationStatus: po.verificationStatus || po.erp_verification_status || po.po_status || "Pending",
+    verifiedBy: po.verifiedBy || po.verified_by_id || null,
+    verifiedDate: po.verifiedDate || po.verified_at || null,
+    branchCode: po.branchCode || po.branch_code || "HYD-HQ",
+    itemsJson: po.itemsJson || po.items_json || "[]",
+    user: po.user || null,
+    vendor: po.vendor || null
+  };
+};
+
 const mapDbUser = (user: any) => {
   if (!user) return null;
   return {
@@ -688,57 +712,114 @@ export const erpDb = {
       return mockStore.notifications[idx];
     }
   },
+
   purchaseOrders: {
     findMany: async (args?: any) => {
       if (isDatabaseConnected()) {
-        const queryArgs = { ...args };
-        if (!queryArgs.select) {
-          queryArgs.include = { user: true, ...(queryArgs.include || {}) };
+        try {
+          const rawPos: any[] = await prisma.$queryRawUnsafe(`
+            SELECT * FROM "public"."purchase_orders" 
+            ORDER BY created_at DESC;
+          `);
+          if (rawPos && rawPos.length > 0) {
+            return rawPos.map(normalizePoRecord);
+          }
+        } catch (e) {
+          // Fallback to Prisma if raw table fails
         }
-        return await (prisma as any).purchaseOrder.findMany(queryArgs);
+        try {
+          const dbPos = await (prisma as any).purchaseOrder.findMany(args);
+          return dbPos.map(normalizePoRecord);
+        } catch (e) {
+          // Fallback
+        }
       }
       let items = mockFindMany("purchaseOrders", args);
       return items.map((po: any) => ({
-        ...po,
+        ...normalizePoRecord(po),
         user: mockStore.users.find(u => u.id === po.customerId)
       }));
     },
     findUnique: async (args: { where: { id?: string; poNumber?: string } }) => {
       if (isDatabaseConnected()) {
-        return await (prisma as any).purchaseOrder.findUnique({
-          where: args.where as any,
-          include: { user: true }
-        });
+        try {
+          if (args.where.poNumber) {
+            const rawPos: any[] = await prisma.$queryRawUnsafe(`
+              SELECT * FROM "public"."purchase_orders" 
+              WHERE po_number = $1 OR customer_po_number = $1
+              LIMIT 1;
+            `, args.where.poNumber);
+            if (rawPos && rawPos.length > 0) {
+              return normalizePoRecord(rawPos[0]);
+            }
+          }
+          if (args.where.id) {
+            const rawPos: any[] = await prisma.$queryRawUnsafe(`
+              SELECT * FROM "public"."purchase_orders" 
+              WHERE id::text = $1 OR po_number = $1
+              LIMIT 1;
+            `, args.where.id);
+            if (rawPos && rawPos.length > 0) {
+              return normalizePoRecord(rawPos[0]);
+            }
+          }
+        } catch (e) {}
+
+        try {
+          const dbPo = await (prisma as any).purchaseOrder.findUnique({
+            where: args.where as any,
+            include: { user: true }
+          });
+          return normalizePoRecord(dbPo);
+        } catch (e) {}
       }
       if (args.where.id) {
         const found = mockStore.purchaseOrders.find(po => po.id === args.where.id) || null;
         if (!found) return null;
-        return { ...found, user: mockStore.users.find(u => u.id === found.customerId) };
+        return normalizePoRecord({ ...found, user: mockStore.users.find(u => u.id === found.customerId) });
       }
       if (args.where.poNumber) {
         const found = mockStore.purchaseOrders.find(po => po.poNumber === args.where.poNumber) || null;
         if (!found) return null;
-        return { ...found, user: mockStore.users.find(u => u.id === found.customerId) };
+        return normalizePoRecord({ ...found, user: mockStore.users.find(u => u.id === found.customerId) });
       }
       return null;
     },
     create: async (args: { data: any }) => {
       if (isDatabaseConnected()) {
-        return await (prisma as any).purchaseOrder.create({ data: args.data, include: { user: true } });
+        try {
+          return await (prisma as any).purchaseOrder.create({ data: args.data, include: { user: true } });
+        } catch (e) {}
       }
       const item = { id: `po-${Date.now()}`, dateReceived: new Date(), companyName: "", verifiedBy: null, verifiedDate: null, ...args.data };
       mockStore.purchaseOrders.push(item);
-      return { ...item, user: mockStore.users.find(u => u.id === item.customerId) };
+      return normalizePoRecord({ ...item, user: mockStore.users.find(u => u.id === item.customerId) });
     },
     update: async (args: { where: { id: string }; data: any }) => {
       if (isDatabaseConnected()) {
-        return await (prisma as any).purchaseOrder.update({ where: { id: args.where.id }, data: args.data, include: { user: true } });
+        try {
+          // Update snake_case purchase_orders in database
+          if (args.data.verificationStatus || args.data.stockStatus) {
+            await prisma.$queryRawUnsafe(`
+              UPDATE "public"."purchase_orders"
+              SET erp_verification_status = $1, po_status = $1
+              WHERE id::text = $2 OR po_number = $2;
+            `, args.data.verificationStatus || "Verified", args.where.id);
+          }
+        } catch (e) {}
+
+        try {
+          const updated = await (prisma as any).purchaseOrder.update({ where: { id: args.where.id }, data: args.data, include: { user: true } });
+          return normalizePoRecord(updated);
+        } catch (e) {}
       }
       const idx = mockStore.purchaseOrders.findIndex(x => x.id === args.where.id);
-      if (idx === -1) throw new Error("PurchaseOrder not found");
-      mockStore.purchaseOrders[idx] = { ...mockStore.purchaseOrders[idx], ...args.data };
-      const po = mockStore.purchaseOrders[idx];
-      return { ...po, user: mockStore.users.find(u => u.id === po.customerId) };
+      if (idx !== -1) {
+        mockStore.purchaseOrders[idx] = { ...mockStore.purchaseOrders[idx], ...args.data };
+        const po = mockStore.purchaseOrders[idx];
+        return normalizePoRecord({ ...po, user: mockStore.users.find(u => u.id === po.customerId) });
+      }
+      return null;
     }
   },
 

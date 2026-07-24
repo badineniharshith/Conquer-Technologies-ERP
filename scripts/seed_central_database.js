@@ -1,5 +1,6 @@
 const { Client } = require('pg');
 const bcrypt = require('bcryptjs');
+const fs = require('fs');
 const path = require('path');
 
 const dbHost = "dpg-d9b3k3gjs32c73al5340-a.singapore-postgres.render.com";
@@ -218,24 +219,47 @@ async function main() {
     const skuToIdMap = new Map();
     prodMapRes.rows.forEach(r => skuToIdMap.set(r.sku, r.id));
 
-    for (const inv of invRes.rows) {
+    const batchSize = 500;
+    let invBatch = [];
+
+    for (let i = 0; i < invRes.rows.length; i++) {
+      const inv = invRes.rows[i];
       const pId = skuToIdMap.get(inv.sku);
       if (!pId) continue;
 
-      await targetClient.query(`
-        INSERT INTO "public"."inventories" (
-          "product_id", "branch_id", "sku", "branch_code", "quantity", "available_qty", "reserved_qty",
-          "allocated_qty", "damaged_qty", "min_stock", "max_stock", "updated_at"
-        )
-        VALUES ($1, 1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP);
-      `, [
-        pId, inv.sku, inv.branchCode || 'HYD-HQ',
-        inv.quantity || 50, inv.availableQty || 40, inv.reservedQty || 10,
-        inv.allocatedQty || 0, inv.damagedQty || 0, inv.minStock || 5, inv.maxStock || 200
-      ]);
-      invMigrated++;
+      invBatch.push({
+        pId, sku: inv.sku, branchCode: inv.branchCode || 'HYD-HQ',
+        quantity: inv.quantity || 50, availableQty: inv.availableQty || 40,
+        reservedQty: inv.reservedQty || 10, allocatedQty: inv.allocatedQty || 0,
+        damagedQty: inv.damagedQty || 0, minStock: inv.minStock || 5, maxStock: inv.maxStock || 200
+      });
+
+      if (invBatch.length >= batchSize || i === invRes.rows.length - 1) {
+        if (invBatch.length > 0) {
+          const valueClauses = [];
+          const values = [];
+          let paramIdx = 1;
+
+          for (const item of invBatch) {
+            valueClauses.push(`($${paramIdx}, 1, $${paramIdx+1}, $${paramIdx+2}, $${paramIdx+3}, $${paramIdx+4}, $${paramIdx+5}, $${paramIdx+6}, $${paramIdx+7}, $${paramIdx+8}, $${paramIdx+9}, CURRENT_TIMESTAMP)`);
+            values.push(item.pId, item.sku, item.branchCode, item.quantity, item.availableQty, item.reservedQty, item.allocatedQty, item.damagedQty, item.minStock, item.maxStock);
+            paramIdx += 10;
+          }
+
+          await targetClient.query(`
+            INSERT INTO "public"."inventories" (
+              "product_id", "branch_id", "sku", "branch_code", "quantity", "available_qty", "reserved_qty",
+              "allocated_stock", "damaged_qty", "min_stock", "max_stock", "updated_at"
+            )
+            VALUES ${valueClauses.join(', ')};
+          `, values);
+
+          invMigrated += invBatch.length;
+          invBatch = [];
+        }
+      }
     }
-    console.log(`Migrated ${invMigrated} inventory records.`);
+    console.log(`Migrated ${invMigrated} inventory records cleanly.`);
 
     const pricesRes = await sourceClient.query(`SELECT * FROM "public"."ProductPrice";`);
     for (const pr of pricesRes.rows) {

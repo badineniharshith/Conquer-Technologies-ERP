@@ -109,9 +109,15 @@ export default function PurchaseOrdersClient({
   // Apply Role-Based Data Isolation
   const filteredPurchaseOrders = useMemo(() => {
     return initialPurchaseOrders.filter(po => {
-      // 1. Customer role isolation: strictly see own POs only
+      // 1. Customer role isolation: see own POs
       if (isCustomer) {
-        return po.customerId === activeUser?.id || po.customerName === activeUser?.name;
+        return (
+          po.customerId === activeUser?.id ||
+          po.customerName?.toLowerCase() === activeUser?.name?.toLowerCase() ||
+          po.companyName?.toLowerCase() === activeUser?.companyName?.toLowerCase() ||
+          po.customerEmail?.toLowerCase() === activeUser?.email?.toLowerCase() ||
+          (activeUser?.email && po.email && po.email.toLowerCase() === activeUser.email.toLowerCase())
+        );
       }
 
       // 2. Branch filters for staff
