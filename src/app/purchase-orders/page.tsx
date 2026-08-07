@@ -1,52 +1,40 @@
-import { erpDb } from "@/lib/db";
+import { prisma } from "@/lib/db";
+import { serializeData } from "@/lib/serialize";
 import PurchaseOrdersClient from "@/components/purchase-orders/PurchaseOrdersClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function PurchaseOrdersPage() {
-  // Load data in parallel, selecting only the necessary columns for faster query performance and limiting POs to 50
-  const [purchaseOrders, users, branches, products, vendors] = await Promise.all([
-    erpDb.purchaseOrders.findMany({
+  const [purchaseOrders, customers, branches, products, vendors] = await Promise.all([
+    prisma.purchaseOrder.findMany({
       orderBy: { dateReceived: "desc" },
       take: 50,
-      select: {
-        id: true,
-        poNumber: true,
-        customerId: true,
-        customerName: true,
-        companyName: true,
-        vendorId: true,
-        totalAmount: true,
-        dateReceived: true,
-        expectedDelivery: true,
-        totalItems: true,
-        verificationStatus: true,
-        stockStatus: true,
-        branchCode: true,
-        itemsJson: true
+      include: {
+        customer: true,
+        poItems: true,
+        attachments: true,
+        statusHistory: true
       }
     }),
-    erpDb.users.findMany({
-      where: { roleId: "CUSTOMER", status: "ACTIVE" },
+    prisma.customer.findMany({
+      where: { status: "ACTIVE" },
       select: {
         id: true,
         name: true,
         email: true,
-        roleId: true,
-        customerId: true,
         gstNumber: true,
-        companyName: true,
+        companyLegalName: true,
         phone: true,
-        address: true
+        billingAddress: true
       }
     }),
-    erpDb.branches.findMany({
+    prisma.branch.findMany({
       select: {
         id: true,
         name: true
       }
     }),
-    erpDb.products.findMany({
+    prisma.product.findMany({
       where: { status: "ACTIVE" },
       select: {
         id: true,
@@ -54,8 +42,7 @@ export default async function PurchaseOrdersPage() {
         name: true
       }
     }),
-    erpDb.vendors.findMany({
-      where: { status: "ACTIVE" },
+    prisma.vendor.findMany({
       select: {
         id: true,
         name: true,
@@ -68,21 +55,13 @@ export default async function PurchaseOrdersPage() {
     })
   ]);
 
-  // Convert Decimal objects and Dates to serializable types for Client Component
-  const serializedPurchaseOrders = purchaseOrders.map((po: any) => ({
-    ...po,
-    totalAmount: po.totalAmount ? Number(po.totalAmount.toString()) : 0,
-    dateReceived: po.dateReceived instanceof Date ? po.dateReceived.toISOString() : po.dateReceived,
-    expectedDelivery: po.expectedDelivery instanceof Date ? po.expectedDelivery.toISOString() : po.expectedDelivery,
-  }));
-
   return (
     <PurchaseOrdersClient
-      initialPurchaseOrders={serializedPurchaseOrders}
-      users={users}
-      branches={branches}
-      products={products}
-      vendors={vendors}
+      initialPurchaseOrders={serializeData(purchaseOrders)}
+      users={serializeData(customers)}
+      branches={serializeData(branches)}
+      products={serializeData(products)}
+      vendors={serializeData(vendors)}
     />
   );
 }

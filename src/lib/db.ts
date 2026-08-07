@@ -121,25 +121,36 @@ const isDatabaseConnected = () => {
 
 const normalizePoRecord = (po: any) => {
   if (!po) return null;
+  let itemsJson = po.itemsJson || po.items_json || "[]";
+  if ((!itemsJson || itemsJson === "[]") && Array.isArray(po.poItems) && po.poItems.length > 0) {
+    itemsJson = JSON.stringify(po.poItems.map((item: any) => ({
+      sku: item.sku || item.productName || "N/A",
+      name: item.productName || item.sku,
+      quantity: Number(item.quantity || 1),
+      unitPrice: Number(item.unitPrice || 0),
+      total: Number(item.total || 0)
+    })));
+  }
   return {
     id: String(po.id),
     poNumber: po.poNumber || po.po_number || "PO-UNKNOWN",
     customerId: String(po.customerId || po.customer_id || ""),
-    customerName: po.customerName || po.primary_contact_name || po.customer_name || "Customer",
+    customerName: po.customerName || po.primaryContactName || po.primary_contact_name || po.customer_name || "Customer",
     companyName: po.companyName || po.company_name || "",
     vendorId: po.vendorId || po.vendor_id || null,
     totalAmount: po.totalAmount !== undefined ? Number(po.totalAmount) : (po.grandTotal !== undefined ? Number(po.grandTotal) : Number(po.total_amount || 0)),
-    dateReceived: po.dateReceived || po.created_at || po.date_received || new Date(),
+    dateReceived: po.dateReceived || po.createdAt || po.created_at || po.date_received || new Date(),
     expectedDelivery: po.expectedDelivery || po.expected_delivery || null,
-    totalItems: Number(po.totalItems || po.total_items || 1),
+    totalItems: Number(po.totalItems || (Array.isArray(po.poItems) && po.poItems.length > 0 ? po.poItems.length : 1)),
     stockStatus: po.stockStatus || po.stock_status || "Checking",
-    verificationStatus: po.verificationStatus || po.erp_verification_status || po.po_status || "Pending",
+    verificationStatus: po.verificationStatus || po.erpVerificationStatus || po.erp_verification_status || po.poStatus || po.po_status || "Pending",
     verifiedBy: po.verifiedBy || po.verified_by_id || null,
     verifiedDate: po.verifiedDate || po.verified_at || null,
     branchCode: po.branchCode || po.branch_code || "HYD-HQ",
-    itemsJson: po.itemsJson || po.items_json || "[]",
+    itemsJson: itemsJson,
     user: po.user || null,
-    vendor: po.vendor || null
+    vendor: po.vendor || null,
+    poItems: po.poItems || []
   };
 };
 
@@ -262,7 +273,7 @@ const makeProxy = (key: keyof MockDbState, prismaModel: any) => ({
   ...(key === "productPrices" ? {
     upsert: async (args: { where: { sku_branchCode: { sku: string; branchCode: string } }; update: any; create: any }) => {
       if (isDatabaseConnected()) {
-        return await prisma.productPrice.upsert({
+        return await (prisma as any).productPrice.upsert({
           where: {
             sku_branchCode: {
               sku: args.where.sku_branchCode.sku,
@@ -302,22 +313,35 @@ export const erpDb = {
   users: {
     findMany: async (args?: any) => {
       if (isDatabaseConnected()) {
-        const queryArgs = { ...args };
-        if (!queryArgs.select && !queryArgs.include) {
-          queryArgs.include = { role: true, branch: true };
+        try {
+          const erpUsers = await (prisma as any).erpUser.findMany({
+            ...args,
+            include: { employee: true, branch: true }
+          });
+          return erpUsers.map(mapDbUser);
+        } catch (e) {
+          // Fallback
         }
-        const dbUsers = await prisma.user.findMany(queryArgs);
-        return dbUsers.map(mapDbUser);
       }
       return mockFindMany("users", args).map(mapDbUser);
     },
     findUnique: async (args: { where: { id?: string; email?: string } }) => {
       if (isDatabaseConnected()) {
-        const dbUser = await prisma.user.findUnique({
-          where: args.where as any,
-          include: { role: true, branch: true }
-        });
-        return mapDbUser(dbUser);
+        try {
+          const erpUser = await (prisma as any).erpUser.findUnique({
+            where: args.where as any,
+            include: { employee: true, branch: true }
+          });
+          if (erpUser) return mapDbUser({ ...erpUser, employee: erpUser.employee });
+        } catch (e) {}
+
+        try {
+          const crmUser = await (prisma as any).crmUser.findUnique({
+            where: args.where as any,
+            include: { employee: true }
+          });
+          if (crmUser) return mapDbUser({ ...crmUser, name: crmUser.fullName, roleId: String(crmUser.roleId), employee: crmUser.employee });
+        } catch (e) {}
       }
       if (args.where.id) return mockStore.users.find(u => u.id === args.where.id) || null;
       if (args.where.email) return mockStore.users.find(u => u.email === args.where.email) || null;
@@ -325,20 +349,22 @@ export const erpDb = {
     },
     create: async (args: { data: any }) => {
       if (isDatabaseConnected()) {
-        const data = { ...args.data };
-        if (data.branch && typeof data.branch === "string") {
-          data.branchName = data.branch;
-          const foundBranch = await prisma.branch.findFirst({ where: { name: { contains: data.branch, mode: 'insensitive' } } });
-          if (foundBranch) {
-            data.branchId = foundBranch.id;
+        try {
+          const data = { ...args.data };
+          if (data.branch && typeof data.branch === "string") {
+            data.branchName = data.branch;
+            const foundBranch = await (prisma as any).branch.findFirst({ where: { name: { contains: data.branch, mode: 'insensitive' } } });
+            if (foundBranch) {
+              data.branchId = foundBranch.id;
+            }
+            delete data.branch;
           }
-          delete data.branch;
-        }
-        if (data.status) {
-          data.isActive = data.status === "ACTIVE";
-        }
-        const created = await prisma.user.create({ data, include: { role: true, branch: true } });
-        return mapDbUser(created);
+          if (data.status) {
+            data.isActive = data.status === "ACTIVE";
+          }
+          const created = await (prisma as any).erpUser.create({ data, include: { employee: true, branch: true } });
+          return mapDbUser(created);
+        } catch (e) {}
       }
       const u = { id: `u-${Date.now()}`, ...args.data, status: args.data.status || "PENDING" };
       mockStore.users.push(u);
@@ -346,24 +372,26 @@ export const erpDb = {
     },
     update: async (args: { where: { id: string }; data: any }) => {
       if (isDatabaseConnected()) {
-        const data = { ...args.data };
-        if (data.branch && typeof data.branch === "string") {
-          data.branchName = data.branch;
-          const foundBranch = await prisma.branch.findFirst({ where: { name: { contains: data.branch, mode: 'insensitive' } } });
-          if (foundBranch) {
-            data.branchId = foundBranch.id;
+        try {
+          const data = { ...args.data };
+          if (data.branch && typeof data.branch === "string") {
+            data.branchName = data.branch;
+            const foundBranch = await (prisma as any).branch.findFirst({ where: { name: { contains: data.branch, mode: 'insensitive' } } });
+            if (foundBranch) {
+              data.branchId = foundBranch.id;
+            }
+            delete data.branch;
           }
-          delete data.branch;
-        }
-        if (data.status) {
-          data.isActive = data.status === "ACTIVE";
-        }
-        const updated = await prisma.user.update({
-          where: { id: args.where.id },
-          data,
-          include: { role: true, branch: true }
-        });
-        return mapDbUser(updated);
+          if (data.status) {
+            data.isActive = data.status === "ACTIVE";
+          }
+          const updated = await (prisma as any).erpUser.update({
+            where: { id: args.where.id },
+            data,
+            include: { employee: true, branch: true }
+          });
+          return mapDbUser(updated);
+        } catch (e) {}
       }
       const idx = mockStore.users.findIndex(u => u.id === args.where.id);
       if (idx === -1) throw new Error("User not found");
@@ -372,15 +400,18 @@ export const erpDb = {
     },
     delete: async (args: { where: { id: string } }) => {
       if (isDatabaseConnected()) {
-        await prisma.stockReservation.deleteMany({
-          where: { customerId: args.where.id }
-        });
-        await prisma.notification.deleteMany({
-          where: { userId: args.where.id }
-        });
-        return await prisma.user.delete({
-          where: { id: args.where.id }
-        });
+        try {
+          const custId = !isNaN(Number(args.where.id)) ? Number(args.where.id) : args.where.id;
+          await (prisma as any).stockReservation.deleteMany({
+            where: typeof custId === 'number' ? { customerId: custId } : { id: args.where.id }
+          });
+          await (prisma as any).notification.deleteMany({
+            where: { userId: args.where.id }
+          });
+          return await (prisma as any).erpUser.delete({
+            where: { id: args.where.id }
+          });
+        } catch (e) {}
       }
       const idx = mockStore.users.findIndex(u => u.id === args.where.id);
       if (idx === -1) throw new Error("User not found");
@@ -395,7 +426,6 @@ export const erpDb = {
 
   roles: {
     findMany: async () => {
-      if (isDatabaseConnected()) return await prisma.role.findMany();
       return mockStore.roles;
     }
   },
@@ -518,6 +548,10 @@ export const erpDb = {
       mockStore.inventory[idx] = { ...mockStore.inventory[idx], ...args.data };
       return mockStore.inventory[idx];
     }
+  },
+
+  get inventories() {
+    return this.inventory;
   },
 
 
@@ -717,21 +751,23 @@ export const erpDb = {
     findMany: async (args?: any) => {
       if (isDatabaseConnected()) {
         try {
-          const rawPos: any[] = await prisma.$queryRawUnsafe(`
-            SELECT * FROM "public"."purchase_orders" 
-            ORDER BY created_at DESC;
-          `);
-          if (rawPos && rawPos.length > 0) {
-            return rawPos.map(normalizePoRecord);
+          const queryArgs: any = { ...args };
+          if (!queryArgs.select && !queryArgs.include) {
+            queryArgs.include = {
+              user: true,
+              vendor: true,
+              poItems: true,
+              attachments: true,
+              statusHistory: true
+            };
           }
-        } catch (e) {
-          // Fallback to Prisma if raw table fails
-        }
-        try {
-          const dbPos = await (prisma as any).purchaseOrder.findMany(args);
+          if (!queryArgs.orderBy) {
+            queryArgs.orderBy = { createdAt: "desc" };
+          }
+          const dbPos = await prisma.purchaseOrder.findMany(queryArgs);
           return dbPos.map(normalizePoRecord);
         } catch (e) {
-          // Fallback
+          console.error("prisma.purchaseOrder.findMany error:", e);
         }
       }
       let items = mockFindMany("purchaseOrders", args);
@@ -740,41 +776,28 @@ export const erpDb = {
         user: mockStore.users.find(u => u.id === po.customerId)
       }));
     },
-    findUnique: async (args: { where: { id?: string; poNumber?: string } }) => {
+    findUnique: async (args: { where: { id?: string | number; poNumber?: string } }) => {
       if (isDatabaseConnected()) {
         try {
-          if (args.where.poNumber) {
-            const rawPos: any[] = await prisma.$queryRawUnsafe(`
-              SELECT * FROM "public"."purchase_orders" 
-              WHERE po_number = $1 OR customer_po_number = $1
-              LIMIT 1;
-            `, args.where.poNumber);
-            if (rawPos && rawPos.length > 0) {
-              return normalizePoRecord(rawPos[0]);
-            }
-          }
-          if (args.where.id) {
-            const rawPos: any[] = await prisma.$queryRawUnsafe(`
-              SELECT * FROM "public"."purchase_orders" 
-              WHERE id::text = $1 OR po_number = $1
-              LIMIT 1;
-            `, args.where.id);
-            if (rawPos && rawPos.length > 0) {
-              return normalizePoRecord(rawPos[0]);
-            }
-          }
-        } catch (e) {}
+          const whereClause: any = {};
+          if (args.where.id) whereClause.id = String(args.where.id);
+          if (args.where.poNumber) whereClause.poNumber = args.where.poNumber;
 
-        try {
-          const dbPo = await (prisma as any).purchaseOrder.findUnique({
-            where: args.where as any,
-            include: { user: true }
+          const dbPo = await prisma.purchaseOrder.findFirst({
+            where: whereClause,
+            include: {
+              customer: true,
+              vendor: true,
+              poItems: true,
+              attachments: true,
+              statusHistory: true
+            }
           });
-          return normalizePoRecord(dbPo);
+          if (dbPo) return normalizePoRecord(dbPo);
         } catch (e) {}
       }
       if (args.where.id) {
-        const found = mockStore.purchaseOrders.find(po => po.id === args.where.id) || null;
+        const found = mockStore.purchaseOrders.find(po => String(po.id) === String(args.where.id)) || null;
         if (!found) return null;
         return normalizePoRecord({ ...found, user: mockStore.users.find(u => u.id === found.customerId) });
       }
@@ -788,32 +811,30 @@ export const erpDb = {
     create: async (args: { data: any }) => {
       if (isDatabaseConnected()) {
         try {
-          return await (prisma as any).purchaseOrder.create({ data: args.data, include: { user: true } });
+          const created = await prisma.purchaseOrder.create({
+            data: args.data,
+            include: { customer: true, vendor: true, poItems: true }
+          });
+          return normalizePoRecord(created);
         } catch (e) {}
       }
       const item = { id: `po-${Date.now()}`, dateReceived: new Date(), companyName: "", verifiedBy: null, verifiedDate: null, ...args.data };
       mockStore.purchaseOrders.push(item);
       return normalizePoRecord({ ...item, user: mockStore.users.find(u => u.id === item.customerId) });
     },
-    update: async (args: { where: { id: string }; data: any }) => {
+    update: async (args: { where: { id: string | number }; data: any }) => {
       if (isDatabaseConnected()) {
         try {
-          // Update snake_case purchase_orders in database
-          if (args.data.verificationStatus || args.data.stockStatus) {
-            await prisma.$queryRawUnsafe(`
-              UPDATE "public"."purchase_orders"
-              SET erp_verification_status = $1, po_status = $1
-              WHERE id::text = $2 OR po_number = $2;
-            `, args.data.verificationStatus || "Verified", args.where.id);
-          }
-        } catch (e) {}
-
-        try {
-          const updated = await (prisma as any).purchaseOrder.update({ where: { id: args.where.id }, data: args.data, include: { user: true } });
+          const poId = String(args.where.id);
+          const updated = await prisma.purchaseOrder.update({
+            where: { id: poId },
+            data: args.data,
+            include: { customer: true, vendor: true, poItems: true }
+          });
           return normalizePoRecord(updated);
         } catch (e) {}
       }
-      const idx = mockStore.purchaseOrders.findIndex(x => x.id === args.where.id);
+      const idx = mockStore.purchaseOrders.findIndex(x => String(x.id) === String(args.where.id));
       if (idx !== -1) {
         mockStore.purchaseOrders[idx] = { ...mockStore.purchaseOrders[idx], ...args.data };
         const po = mockStore.purchaseOrders[idx];
@@ -882,12 +903,12 @@ export const erpDb = {
     }
   },
 
-  roles_raw: makeProxy("roles", prisma.role),
-  categories_raw: makeProxy("categories", prisma.category),
-  inventoryMovements: makeProxy("inventoryMovements", prisma.inventoryMovement),
-  stockAlerts: makeProxy("stockAlerts", prisma.stockAlert),
-  productPrices: makeProxy("productPrices", prisma.productPrice),
-  productPriceHistory: makeProxy("productPriceHistory", prisma.productPriceHistory),
+  roles_raw: makeProxy("roles", (prisma as any).role),
+  categories_raw: makeProxy("categories", (prisma as any).category),
+  inventoryMovements: makeProxy("inventoryMovements", (prisma as any).inventoryMovement),
+  stockAlerts: makeProxy("stockAlerts", (prisma as any).stockAlert),
+  productPrices: makeProxy("productPrices", (prisma as any).productPrice),
+  productPriceHistory: makeProxy("productPriceHistory", (prisma as any).productPriceHistory),
 
   vendors: {
     findMany: async (args?: any) => {

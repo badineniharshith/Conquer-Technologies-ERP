@@ -8,386 +8,461 @@ datasource db {
 }
 
 model User {
-  id                       String             @id @default(uuid())
-  name                     String
-  email                    String             @unique
-  passwordHash             String
-  roleId                   String
-  branchId                 String?
-  isActive                 Boolean            @default(true)
-  createdAt                DateTime           @default(now())
-  updatedAt                DateTime           @updatedAt
-  status                   String             @default("ACTIVE")
-  phone                    String?
-  address                  String?
-  employeeId               String?            @unique
-  customerId               String?            @unique
-  gstNumber                String?            @default("")
-  companyName              String?            @default("")
-  department               String?            @default("Supply Chain")
-  designation              String?            @default("Operations Executive")
-  city                     String?            @default("Hyderabad")
-  state                    String?            @default("Telangana")
-  country                  String?            @default("India")
-  lastLogin                DateTime?
-  currentLoginAt           DateTime?
-  lastLoginAt              DateTime?
-  branchName               String             @default("Head Office")
-  customerType             String             @default("STANDARD")
-  assignedEmployeeId       String?
-  inheritBranchPermissions Boolean            @default(true)
-  pagePermissions          String?
-  reportsToId              String?
-  notifications            Notification[]
-  purchaseOrders           PurchaseOrder[]
-  reservations             StockReservation[] @relation("CustomerReservations")
-  createdReservations      StockReservation[] @relation("EmployeeReservations")
-  opportunities            Opportunity[]
-  assignedEmployee         User?              @relation("EmployeeCustomers", fields: [assignedEmployeeId], references: [id])
-  customers                User[]             @relation("EmployeeCustomers")
-  reportsTo                User?              @relation("UserHierarchy", fields: [reportsToId], references: [id])
-  subordinates             User[]             @relation("UserHierarchy")
-  profileRequests          ProfileUpdateRequest[]
-  branch                   Branch?            @relation(fields: [branchId], references: [id])
-  role                     Role               @relation(fields: [roleId], references: [id])
+  id                  String             @id @default(uuid())
+  name                String
+  email               String             @unique
+  passwordHash        String             @map("password_hash")
+  employeeId          String?            @unique @map("employee_id")
+  phone               String?
+  department          String?            @default("Supply Chain")
+  designation         String?            @default("Operations Executive")
+  roleId              String             @map("role_id")
+  branchId            String?            @map("branch_id")
+  regionId            Int?               @map("region_id")
+  reportsToId         String?            @map("reporting_to_user_id")
+  isActive            Boolean            @default(true) @map("is_active")
+  status              String             @default("ACTIVE")
+  joiningDate         DateTime?          @map("joining_date")
+  createdAt           DateTime           @default(now()) @map("created_at")
+  updatedAt           DateTime           @updatedAt @map("updated_at")
 
-  @@index([roleId])
-  @@index([branchId])
-  @@index([status])
-  @@index([assignedEmployeeId])
-  @@index([reportsToId])
-  @@index([customerId])
+  role                Role               @relation(fields: [roleId], references: [id])
+  branch              Branch?            @relation(fields: [branchId], references: [id])
+  reportsTo           User?              @relation("UserHierarchy", fields: [reportsToId], references: [id])
+  subordinates        User[]             @relation("UserHierarchy")
+
+  assignedCustomers   Customer[]         @relation("AssignedExecutive")
+  managedCustomers    Customer[]         @relation("AssignedManager")
+  createdReservations StockReservation[] @relation("EmployeeReservations")
+  notifications       Notification[]
+  profileRequests     ProfileUpdateRequest[]
+
+  @@map("users")
 }
 
 model Role {
-  id    String @id @default(uuid())
-  name  String @unique
-  users User[]
+  id          String   @id @default(uuid())
+  name        String   @unique
+  permissions Json?
+  level       Int?
+  isActive    Boolean? @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  users       User[]
+
+  @@map("roles")
 }
 
 model Branch {
   id              String      @id @default(uuid())
   name            String      @unique
-  pagePermissions String?
+  regionId        Int?        @map("region_id")
+  pagePermissions String?     @map("page_permissions")
   inventories     Inventory[]
   users           User[]
+  customers       Customer[]
+
+  @@map("branches")
+}
+
+model Region {
+  id        Int        @id @default(autoincrement())
+  name      String     @unique
+  code      String?
+  customers Customer[]
+
+  @@map("regions")
 }
 
 model Category {
-  id       String    @id @default(uuid())
-  name     String    @unique
-  products Product[]
+  id             String    @id @default(uuid())
+  name           String    @unique
+  status         String    @default("ACTIVE")
+  businessUnitId Int?      @map("business_unit_id")
+  products       Product[]
+
+  @@map("categories")
 }
 
 model Product {
-  id             String             @id @default(uuid())
-  sku            String             @unique
-  name           String
-  categoryId     String
-  brand          String
-  serialTracking Boolean            @default(false)
-  barcode        String?
-  reorderLevel   Int                @default(10)
-  safetyStock    Int                @default(5)
-  status         String             @default("ACTIVE")
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
-  inventories    Inventory[]
-  category       Category           @relation(fields: [categoryId], references: [id])
-  reservations   StockReservation[]
-  reservationItems StockReservationItem[]
-  poItems        PoItem[]
+  id               String                 @id @default(uuid())
+  sku              String                 @unique
+  name             String
+  categoryId       String?                @map("category_id")
+  brand            String?                @default("Generic")
+  serialTracking   Boolean                @default(false) @map("serial_tracking")
+  batchTracking    Boolean                @default(false) @map("batch_tracking")
+  barcode          String?
+  costPrice        Decimal?               @default(0) @map("cost_price") @db.Decimal(12, 2)
+  sellingPrice     Decimal?               @default(0) @map("price") @db.Decimal(12, 2)
+  marketPrice      Decimal?               @default(0) @map("market_price") @db.Decimal(12, 2)
+  taxPercent       Decimal?               @default(18) @map("tax_percent") @db.Decimal(5, 2)
+  warrantyMonths   Int?                   @default(12) @map("warranty_months")
+  reorderLevel     Int                    @default(10) @map("reorder_level")
+  safetyStock      Int                    @default(5) @map("safety_stock")
+  status           String                 @default("ACTIVE")
+  createdAt        DateTime               @default(now()) @map("created_at")
+  updatedAt        DateTime               @updatedAt @map("updated_at")
+  itemNumber       String?                @map("item_number")
+  businessUnitId   Int?                   @map("business_unit_id")
 
-  @@index([brand])
-  @@index([categoryId])
-  @@index([status])
+  category         Category?              @relation(fields: [categoryId], references: [id])
+  inventories      Inventory[]
+  reservations     StockReservation[]
+  reservationItems StockReservationItem[]
+  poItems          PoItem[]
+
+  @@map("products")
 }
 
 model Inventory {
-  id             String   @id @default(uuid())
-  productId      String
-  branchId       String
-  availableStock Int      @default(0)
-  reservedStock  Int      @default(0)
-  allocatedStock Int      @default(0)
-  damagedStock   Int      @default(0)
-  reorderLevel   Int      @default(8)
-  updatedAt      DateTime @updatedAt
-  itemName       String   @default("")
-  sku            String   @default("")
-  branchCode     String   @default("")
-  quantity       Int      @default(0)
-  availableQty   Int      @default(0)
-  reservedQty    Int      @default(0)
-  allocatedQty   Int      @default(0)
-  damagedQty     Int      @default(0)
-  returnedQty    Int      @default(0)
-  transitQty     Int      @default(0)
-  incomingQty    Int      @default(0)
-  outgoingQty    Int      @default(0)
-  deadQty        Int      @default(0)
-  minStock       Int      @default(5)
-  maxStock       Int      @default(200)
-  warehouseZone  String   @default("A1")
-  ageingDays     Int      @default(0)
-  createdAt      DateTime @default(now())
-  branch         Branch   @relation(fields: [branchId], references: [id])
-  product        Product  @relation(fields: [productId], references: [id])
+  id             String    @id @default(uuid())
+  productId      String?   @map("product_id")
+  branchId       String?   @map("branch_id")
+  availableStock Int       @default(0) @map("available_stock")
+  reservedStock  Int       @default(0) @map("reserved_stock")
+  damagedStock   Int       @default(0) @map("damaged_stock")
+  reorderLevel   Int       @default(8) @map("reorder_level")
+  itemName       String    @default("") @map("item_name")
+  sku            String    @default("")
+  branchCode     String    @default("") @map("branch_code")
+  quantity       Int       @default(0)
+  availableQty   Int       @default(0) @map("available_qty")
+  reservedQty    Int       @default(0) @map("reserved_qty")
+  allocatedQty   Int       @default(0) @map("allocated_qty")
+  damagedQty     Int       @default(0) @map("damaged_qty")
+  returnedQty    Int       @default(0) @map("returned_qty")
+  transitQty     Int       @default(0) @map("transit_qty")
+  incomingQty    Int       @default(0) @map("incoming_qty")
+  outgoingQty    Int       @default(0) @map("outgoing_qty")
+  deadQty        Int       @default(0) @map("dead_qty")
+  minStock       Int       @default(5) @map("min_stock")
+  maxStock       Int       @default(200) @map("max_stock")
+  warehouseZone  String    @default("A1") @map("warehouse_zone")
+  ageingDays     Int       @default(0) @map("ageing_days")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  @@index([productId])
-  @@index([branchId])
-  @@index([sku])
-  @@index([branchCode])
+  branch         Branch?   @relation(fields: [branchId], references: [id])
+  product        Product?  @relation(fields: [productId], references: [id])
+
+  @@map("inventories")
 }
 
 model InventoryMovement {
-  id         String   @id @default(uuid())
+  id         Int      @id @default(autoincrement())
   sku        String
-  branchCode String
+  branchCode String   @map("branch_code")
   type       String
   quantity   Int
-  details    String
+  details    String?
   timestamp  DateTime @default(now())
-  userId     String?
+  userId     String?  @map("user_id")
 
-  @@index([sku])
-  @@index([branchCode])
-  @@index([timestamp])
+  @@map("inventory_movements")
 }
 
 model StockAlert {
-  id         String   @id @default(uuid())
+  id         Int      @id @default(autoincrement())
   type       String
   message    String
-  branchCode String
+  branchCode String?  @map("branch_code")
   resolved   Boolean  @default(false)
-  createdAt  DateTime @default(now())
+  createdAt  DateTime @default(now()) @map("created_at")
 
-  @@index([branchCode])
-  @@index([resolved])
-  @@index([createdAt])
-}
-
-model ProductPrice {
-  id           String   @id @default(uuid())
-  sku          String
-  branchCode   String
-  costPrice    Float
-  sellingPrice Float
-  mrp          Float    @default(0.0)
-  margin       Float
-  lastUpdated  DateTime @default(now())
-
-  @@unique([sku, branchCode])
-  @@index([sku])
-  @@index([branchCode])
+  @@map("stock_alerts")
 }
 
 model ProductPriceHistory {
-  id           String   @id @default(uuid())
+  id           Int      @id @default(autoincrement())
   sku          String
-  branchCode   String
-  costPrice    Float
-  sellingPrice Float
+  branchCode   String   @map("branch_code")
+  costPrice    Float    @map("cost_price")
+  sellingPrice Float    @map("selling_price")
   mrp          Float    @default(0.0)
-  updatedBy    String
-  updatedAt    DateTime @default(now())
+  updatedBy    String?  @map("updated_by")
+  updatedAt    DateTime @default(now()) @map("updated_at")
 
-  @@index([sku])
-  @@index([branchCode])
-  @@index([updatedAt])
+  @@map("product_price_history")
 }
 
-
 model StockReservation {
-  id                String    @id @default(uuid())
-  reservationNumber String    @unique
-  customerId        String
-  employeeId        String?
-  productId         String?
+  id                String                 @id @default(uuid())
+  reservationNumber String?                @map("reservation_number")
+  customerId        String?                @map("customer_id")
+  employeeId        String?                @map("employee_id")
+  opportunityId     String?                @map("opportunity_id")
+  purchaseOrderId   String?                @map("purchase_order_id")
+  productId         String?                @map("product_id")
   sku               String?
-  branchCode        String    @default("HYD-HQ")
-  quantity          Int?
-  status            String    @default("PENDING")
+  branchCode        String?                @default("HYD-HQ") @map("branch_code")
+  quantity          Int?                   @default(1)
+  status            String                 @default("PENDING")
   notes             String?
-  project           String?            @default("Default Project")
-  reservedAt        DateTime  @default(now())
-  expiresAt         DateTime
-  acceptedAt        DateTime?
-  rejectedAt        DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  user              User      @relation("CustomerReservations", fields: [customerId], references: [id])
-  employee          User?     @relation("EmployeeReservations", fields: [employeeId], references: [id])
-  product           Product?  @relation(fields: [productId], references: [id])
+  project           String?                @default("Default Project")
+  reservedAt        DateTime?              @default(now()) @map("reserved_at")
+  expiresAt         DateTime?              @map("expires_at")
+  acceptedAt        DateTime?              @map("accepted_at")
+  rejectedAt        DateTime?              @map("rejected_at")
+  verifiedAt        DateTime?              @map("verified_at")
+  processingAt      DateTime?              @map("processing_at")
+  completedAt       DateTime?              @map("completed_at")
+  cancelledAt       DateTime?              @map("cancelled_at")
+  createdAt         DateTime               @default(now()) @map("created_at")
+  updatedAt         DateTime               @updatedAt @map("updated_at")
+
+  customer          Customer?              @relation(fields: [customerId], references: [id])
+  employee          User?                  @relation("EmployeeReservations", fields: [employeeId], references: [id])
+  product           Product?               @relation(fields: [productId], references: [id])
   items             StockReservationItem[]
 
-  // Phase 18 timestamps
-  verifiedAt        DateTime?
-  processingAt      DateTime?
-  completedAt       DateTime?
-  cancelledAt       DateTime?
-  draftedAt         DateTime?
-
-  @@index([customerId])
-  @@index([employeeId])
-  @@index([productId])
-  @@index([status])
-  @@index([expiresAt])
-  @@index([createdAt])
+  @@map("stock_reservations")
 }
 
 model StockReservationItem {
-  id            String           @id @default(uuid())
-  reservationId String
-  productId     String
-  sku           String
-  quantity      Int
-  status        String           @default("PENDING")
-  reservedQty   Int              @default(0)
-  shortageQty   Int              @default(0)
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  id            String            @id @default(uuid())
+  reservationId String?           @map("reservation_id")
+  productId     String?           @map("product_id")
+  sku           String?
+  productName   String?           @map("product_name")
+  quantity      Int?              @default(1)
+  reservedQty   Int?              @default(0) @map("reserved_qty")
+  shortageQty   Int?              @default(0) @map("shortage_qty")
+  unitPrice     Decimal?          @map("unit_price") @db.Decimal(12, 2)
+  branchCode    String?           @map("branch_code")
+  status        String            @default("PENDING")
+  createdAt     DateTime          @default(now()) @map("created_at")
 
-  reservation   StockReservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
-  product       Product          @relation(fields: [productId], references: [id])
+  reservation   StockReservation? @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  product       Product?          @relation(fields: [productId], references: [id])
 
-  @@index([reservationId])
-  @@index([productId])
+  @@map("stock_reservation_items")
 }
 
 model Notification {
   id        String   @id @default(uuid())
-  userId    String
+  userId    String   @map("user_id")
   title     String
   message   String
+  type      String?
   read      Boolean  @default(false)
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id])
+  relatedId Int?     @map("related_id")
+  createdAt DateTime @default(now()) @map("created_at")
 
-  @@index([userId])
-  @@index([read])
-  @@index([createdAt])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model Customer {
+  id                  String             @id @default(uuid())
+  crmCustomerId       Int?               @unique @map("crm_customer_id")
+  name                String             @map("company_name")
+  customerCode        String?            @map("customer_code")
+  companyLegalName    String?            @map("company_legal_name")
+  tradeName           String?            @map("trade_name")
+  customerType        String?            @default("STANDARD") @map("customer_type")
+  gstNumber           String?            @map("gst_number")
+  panNumber           String?            @map("pan_number")
+  email               String?
+  phone               String?
+  billingStreet       String?            @map("billing_street")
+  billingCity         String?            @map("billing_city")
+  billingDistrict     String?            @map("billing_district")
+  billingState        String?            @map("billing_state")
+  billingZip          String?            @map("billing_zip")
+  billingAddress      String?            @map("billing_address")
+  shippingStreet      String?            @map("shipping_street")
+  shippingCity        String?            @map("shipping_city")
+  shippingDistrict    String?            @map("shipping_district")
+  shippingState       String?            @map("shipping_state")
+  shippingZip         String?            @map("shipping_zip")
+  shippingAddress     String?            @map("shipping_address")
+  country             String?            @default("India")
+  state               String?
+  city                String?
+  regionId            Int?               @map("region_id")
+  branchId            String?            @map("branch_id")
+  assignedExecutiveId String?            @map("assigned_executive_id")
+  assignedManagerId   String?            @map("assigned_manager_id")
+  creditLimit         Decimal?           @default(0) @map("credit_limit") @db.Decimal(12, 2)
+  creditUsed          Decimal?           @default(0) @map("credit_used") @db.Decimal(12, 2)
+  paymentTerms        String?            @default("Net 30") @map("payment_terms")
+  status              String?            @default("ACTIVE")
+  createdAt           DateTime?          @default(now()) @map("created_at")
+  updatedAt           DateTime?          @updatedAt @map("updated_at")
+
+  region              Region?            @relation(fields: [regionId], references: [id])
+  branch              Branch?            @relation(fields: [branchId], references: [id])
+  assignedExecutive   User?              @relation("AssignedExecutive", fields: [assignedExecutiveId], references: [id])
+  assignedManager     User?              @relation("AssignedManager", fields: [assignedManagerId], references: [id])
+  purchaseOrders      PurchaseOrder[]
+  reservations        StockReservation[]
+
+  @@map("customers")
 }
 
 model PurchaseOrder {
-  id                 String       @id @default(uuid())
-  poNumber           String       @unique
-  customerId         String
-  customerName       String
-  companyName        String       @default("")
-  vendorId           String?
-  totalAmount        Decimal      @default(0) @db.Decimal(10, 2)
-  dateReceived       DateTime     @default(now())
-  expectedDelivery   DateTime?
-  totalItems         Int
-  stockStatus        String       @default("Checking")
-  verificationStatus String       @default("Pending")
-  verifiedBy         String?
-  verifiedDate       DateTime?
-  branchCode         String       @default("HYD-HQ")
-  itemsJson          String       @default("[]")
-  user               User         @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  vendor             Vendor?      @relation(fields: [vendorId], references: [id])
-  opportunity        Opportunity?
-  poItems            PoItem[]
+  id                    String            @id @default(uuid())
+  poNumber              String            @unique @map("po_number")
+  customerId            String?           @map("customer_id")
+  customerName          String?           @map("customer_name")
+  companyName           String?           @default("") @map("company_name")
+  vendorId              String?           @map("vendor_id")
+  totalAmount           Decimal           @default(0) @map("total_amount") @db.Decimal(12, 2)
+  dateReceived          DateTime          @default(now()) @map("date_received")
+  expectedDelivery      DateTime?         @map("expected_delivery")
+  totalItems            Int               @default(0) @map("total_items")
+  stockStatus           String            @default("Checking") @map("stock_status")
+  verificationStatus    String            @default("Pending") @map("verification_status")
+  erpVerificationStatus String?           @map("erp_verification_status")
+  erpSyncStatus         String?           @map("erp_sync_status")
+  poStatus              String?           @default("PENDING") @map("po_status")
+  approvalStatus        String?           @default("PENDING") @map("approval_status")
+  verifiedBy            String?           @map("verified_by")
+  verifiedDate          DateTime?         @map("verified_date")
+  branchCode            String            @default("HYD-HQ") @map("branch_code")
+  itemsJson             String            @default("[]") @map("items_json")
+  gstNumber             String?           @map("gst_number")
+  billingAddress        String?           @map("billing_address")
+  shippingAddress       String?           @map("shipping_address")
+  primaryContactName    String?           @map("primary_contact_name")
+  phone                 String?
+  email                 String?
+  subtotal              Decimal?          @map("subtotal") @db.Decimal(12, 2)
+  grandTotal            Decimal?          @map("grand_total") @db.Decimal(12, 2)
+  currency              String?           @default("INR")
+  quotationId           String?           @map("quotation_id")
+  createdAt             DateTime          @default(now()) @map("created_at")
+  updatedAt             DateTime          @updatedAt @map("updated_at")
 
-  @@index([customerId])
-  @@index([vendorId])
-  @@index([branchCode])
-  @@index([verificationStatus])
-  @@index([dateReceived])
-  @@index([customerId, verificationStatus])
+  customer              Customer?         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  vendor                Vendor?           @relation(fields: [vendorId], references: [id])
+  poItems               PoItem[]
+  attachments           PoAttachment[]
+  statusHistory         PoStatusHistory[]
+
+  @@map("purchase_orders")
 }
 
-model Opportunity {
-  id                 String        @id @default(uuid())
-  opportunityNumber  String        @unique
-  customerId         String
-  customerName       String
-  companyName        String        @default("")
-  purchaseOrderId    String?       @unique
-  productDetails     String        @default("[]")
-  totalQuantity      Int           @default(0)
-  reservationDate    DateTime      @default(now())
-  expiryDate         DateTime
-  status             String        @default("OPEN")
-  notes              String?
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
-  purchaseOrder      PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
-  user               User          @relation(fields: [customerId], references: [id])
+model PoItem {
+  id             String        @id @default(uuid())
+  poId           String        @map("purchase_order_id")
+  poNumber       String?       @map("po_number")
+  productId      String?       @map("product_id")
+  productName    String?       @default("") @map("product_name")
+  sku            String
+  quantity       Int
+  unitPrice      Decimal       @default(0) @map("unit_price") @db.Decimal(12, 2)
+  discount       Decimal?      @db.Decimal(12, 2)
+  tax            Decimal?      @db.Decimal(12, 2)
+  total          Decimal?      @db.Decimal(12, 2)
+  itemStatus     String        @default("Pending") @map("item_status")
+  uom            String?
+  oem            String?
+  category       String?
+  description    String?
+  businessUnitId Int?          @map("business_unit_id")
+  businessUnitName String?     @map("business_unit_name")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
 
-  // Phase 18 Sync fields
-  reservationId      String?
-  product            String?
-  requestedDeliveryDate DateTime?
-  reservationStatus  String?
-  assignedExecutive  String?
-  branch             String?
+  purchaseOrder  PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+  product        Product?      @relation(fields: [productId], references: [id])
 
-  @@index([customerId])
-  @@index([status])
-  @@index([purchaseOrderId])
-  @@index([createdAt])
+  @@map("purchase_order_items")
 }
 
-// ─── erpstructure models ──────────────────────────────────────────────────────
+model PoAttachment {
+  id            String        @id @default(uuid())
+  poId          String        @map("purchase_order_id")
+  fileName      String        @map("file_name")
+  filePath      String        @map("file_path")
+  fileSize      Int?          @map("file_size")
+  fileType      String?       @map("file_type")
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  purchaseOrder PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+
+  @@map("purchase_order_attachments")
+}
+
+model PoStatusHistory {
+  id            String        @id @default(uuid())
+  poId          String        @map("purchase_order_id")
+  status        String?
+  remarks       String?
+  updatedById   String?       @map("updated_by_id")
+  updatedByName String?       @map("updated_by_name")
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  purchaseOrder PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+
+  @@map("purchase_order_status_history")
+}
 
 model Vendor {
   id             String          @id @default(uuid())
   name           String
-  contactPerson  String          @default("")
+  contactPerson  String          @default("") @map("contact_person")
   email          String          @default("")
   phone          String          @default("")
   address        String          @default("")
-  gstNumber      String          @default("")
+  gstNumber      String          @default("") @map("gst_number")
   status         String          @default("ACTIVE")
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
   purchaseOrders PurchaseOrder[]
 
-  @@index([status])
-  @@index([name])
-}
-
-model PoItem {
-  id            String        @id @default(uuid())
-  poId          String
-  productId     String
-  sku           String
-  productName   String        @default("")
-  quantity      Int
-  unitPrice     Decimal       @default(0) @db.Decimal(10, 2)
-  itemStatus    String        @default("Pending")
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  purchaseOrder PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
-  product       Product       @relation(fields: [productId], references: [id])
-
-  @@index([poId])
-  @@index([productId])
-  @@index([sku])
-  @@index([itemStatus])
+  @@map("vendors")
 }
 
 model ProfileUpdateRequest {
-  id               String    @id @default(uuid())
-  userId           String
-  contactPerson    String
-  email            String
-  phone            String
-  companyAddress   String
-  alternateContact String?
-  status           String    @default("PENDING")
-  reviewedBy       String?
-  reviewedAt       DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id                   String    @id @default(uuid())
+  userId               String    @map("user_id")
+  requestedEmail       String?   @map("requested_email")
+  requestedPhone       String?   @map("requested_phone")
+  requestedAddress     String?   @map("requested_address")
+  requestedName        String?   @map("requested_name")
+  requestedCompany     String?   @map("requested_company")
+  requestedDepartment  String?   @map("requested_department")
+  requestedDesignation String?   @map("requested_designation")
+  requestedEmployeeId  String?   @map("requested_employee_id")
+  requestedGstNumber   String?   @map("requested_gst_number")
+  status               String    @default("PENDING")
+  reviewedBy           String?   @map("reviewed_by")
+  reviewedAt           DateTime? @map("reviewed_at")
+  rejectionReason      String?   @map("rejection_reason")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
 
-  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
-  @@index([status])
+  @@map("profile_update_requests")
 }
 
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    String?  @map("user_id")
+  action    String
+  entity    String?
+  entityId  Int?     @map("entity_id")
+  oldValue  Json?    @map("old_value")
+  newValue  Json?    @map("new_value")
+  ipAddress String?  @map("ip_address")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("audit_logs")
+}
+
+model BusinessUnit {
+  id          Int      @id @default(autoincrement())
+  name        String
+  code        String?
+  description String?
+  status      String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("business_units")
+}

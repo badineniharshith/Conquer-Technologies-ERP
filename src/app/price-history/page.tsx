@@ -1,4 +1,5 @@
-import { erpDb } from "@/lib/db";
+import { prisma } from "@/lib/db";
+import { serializeData } from "@/lib/serialize";
 import PriceHistoryClient from "./PriceHistoryClient";
 
 export const dynamic = "force-dynamic";
@@ -9,28 +10,26 @@ interface PageProps {
 
 export default async function PriceHistoryPage({ searchParams }: PageProps) {
   const params = await searchParams;
-  const products = await erpDb.products.findMany();
-  const categories = await erpDb.categories.findMany();
-  const purchaseOrders = await erpDb.purchaseOrders.findMany();
-  const reservations = await erpDb.stockReservations.findMany();
+  const products = await prisma.product.findMany({ select: { id: true, sku: true, name: true, categoryId: true } });
+  const categories = await prisma.category.findMany();
 
   const sku = params.sku || products[0]?.sku || "";
   const compareSku = params.compareSku || products[1]?.sku || "";
 
-  const history = await erpDb.productPriceHistory.findMany({
+  const history = await prisma.productPriceHistory.findMany({
     where: {
-      sku: { in: [sku, compareSku] }
+      sku: { in: [sku, compareSku].filter(Boolean) }
     },
     orderBy: { updatedAt: "asc" }
   });
 
   return (
     <PriceHistoryClient
-      initialHistory={history}
-      products={products}
-      categories={categories}
-      purchaseOrders={purchaseOrders}
-      reservations={reservations}
+      initialHistory={serializeData(history)}
+      products={serializeData(products)}
+      categories={serializeData(categories)}
+      purchaseOrders={[]}
+      reservations={[]}
       searchSku={sku}
       searchCompareSku={compareSku}
     />

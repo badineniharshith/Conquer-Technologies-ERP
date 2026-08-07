@@ -28,10 +28,14 @@ export default async function AnalyticsPage() {
 
   let priceHistory: any[] = [];
   if (!erpDb.isMock()) {
-    const { prisma: localPrisma } = await import("@/lib/db");
-    priceHistory = await localPrisma.productPriceHistory.findMany({
-      orderBy: { updatedAt: "asc" }
-    });
+    try {
+      const { prisma: localPrisma } = await import("@/lib/db");
+      priceHistory = await (localPrisma as any).productPriceHistory.findMany({
+        orderBy: { updatedAt: "asc" }
+      });
+    } catch (e) {
+      priceHistory = [];
+    }
   } else {
     // Fallback Mock data
     priceHistory = [

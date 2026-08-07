@@ -1,13 +1,14 @@
-import { erpDb } from "@/lib/db";
+import { prisma } from "@/lib/db";
+import { serializeData } from "@/lib/serialize";
 import CategoriesClient from "./CategoriesClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function CategoriesPage() {
   const [categories, products] = await Promise.all([
-    erpDb.categories.findMany(),
-    erpDb.products.findMany(),
+    prisma.category.findMany({ orderBy: { name: "asc" } }),
+    prisma.product.findMany({ select: { id: true, categoryId: true, brand: true, status: true } }),
   ]);
 
-  return <CategoriesClient categories={categories} products={products} />;
+  return <CategoriesClient categories={serializeData(categories)} products={serializeData(products)} />;
 }

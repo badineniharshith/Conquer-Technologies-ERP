@@ -75,12 +75,12 @@ export default function PriceHistoryClient({
 
   const handleSkuChange = (newSku: string) => {
     setSelectedSku(newSku);
-    router.push(`?sku=${newSku}&compareSku=${compareSku}`);
+    window.history.replaceState(null, "", `?sku=${encodeURIComponent(newSku)}&compareSku=${encodeURIComponent(compareSku)}`);
   };
 
   const handleCompareSkuChange = (newCompareSku: string) => {
     setCompareSku(newCompareSku);
-    router.push(`?sku=${selectedSku}&compareSku=${newCompareSku}`);
+    window.history.replaceState(null, "", `?sku=${encodeURIComponent(selectedSku)}&compareSku=${encodeURIComponent(newCompareSku)}`);
   };
 
   // Check if database data is sufficient

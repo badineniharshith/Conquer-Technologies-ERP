@@ -1,4 +1,5 @@
-import { erpDb } from "@/lib/db";
+import { prisma } from "@/lib/db";
+import { serializeData } from "@/lib/serialize";
 import ReservedStockClient from "@/components/reservations/ReservedStockClient";
 import { cookies } from "next/headers";
 import { verifyJwt } from "@/lib/jwt";
@@ -24,79 +25,50 @@ export default async function ReservedStockPage() {
   let products: any[] = [];
   let inventory: any[] = [];
 
-  const isCustomer = payload.role === "CUSTOMER";
-  const isSuperAdmin = payload.role === "SUPER_ADMIN";
-  const isDirectorOrManager = ["DIRECTOR_OPERATIONS", "OPERATIONS_MANAGER", "ADMIN"].includes(payload.role);
+  const isSuperAdmin = ["SUPER_ADMIN", "DIRECTOR", "ADMIN"].includes(payload.role);
 
-  // Fetch reservations based on role
-  if (isCustomer) {
-    reservations = await erpDb.stockReservations.findMany({
-      where: { customerId: payload.id },
+  if (isSuperAdmin) {
+    reservations = await prisma.stockReservation.findMany({
       include: {
         product: true,
-        user: true,
-        employee: true
-      }
-    });
-  } else if (isSuperAdmin || isDirectorOrManager) {
-    reservations = await erpDb.stockReservations.findMany({
-      include: {
-        product: true,
-        user: true,
-        employee: true
-      }
+        customer: true,
+        employee: true,
+        items: true
+      },
+      orderBy: { createdAt: "desc" }
     });
   } else {
-    // Executive / Assistant Manager
-    const assigned = await erpDb.users.findMany({
-      where: { roleId: "CUSTOMER", reportsToId: payload.id },
-      select: { id: true }
-    });
-    const customerIds = assigned.map((c: any) => c.id);
-
-    reservations = await erpDb.stockReservations.findMany({
-      where: {
-        OR: [
-          { employeeId: payload.id },
-          { customerId: { in: customerIds } }
-        ]
-      },
+    reservations = await prisma.stockReservation.findMany({
       include: {
         product: true,
-        user: true,
-        employee: true
-      }
+        customer: true,
+        employee: true,
+        items: true
+      },
+      orderBy: { createdAt: "desc" }
     });
   }
 
-  // Employees, Admins, and Super Admins should be able to select ANY active Customer when creating a reservation
-  if (!isCustomer) {
-    customers = await erpDb.users.findMany({
-      where: { roleId: "CUSTOMER", status: "ACTIVE" },
-      include: {
-        assignedEmployee: {
-          select: { id: true, name: true, email: true, phone: true, branchName: true }
-        }
-      }
-    });
-  }
+  customers = await prisma.customer.findMany({
+    where: { status: "ACTIVE" },
+    select: { id: true, name: true, email: true, phone: true }
+  });
 
-  // Load products and inventory details for ALL roles (including Customer) so they can choose items to lock
-  products = await erpDb.products.findMany({
+  products = await prisma.product.findMany({
     where: { status: "ACTIVE" }
   });
-  inventory = await erpDb.inventory.findMany();
 
-  const branchesList = await erpDb.branches.findMany();
+  inventory = await prisma.inventory.findMany();
+  const branchesList = await prisma.branch.findMany();
 
   return (
     <ReservedStockClient
-      reservations={reservations}
-      currentUser={payload}
-      customers={customers}
-      products={products}
-      inventory={inventory}
-      branches={branchesList}
+      reservations={serializeData(reservations)}
+      currentUser={serializeData(payload)}
+      customers={serializeData(customers)}
+      products={serializeData(products)}
+      inventory={serializeData(inventory)}
+      branches={serializeData(branchesList)}
     />
   );
 }

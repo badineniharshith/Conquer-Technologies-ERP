@@ -32,94 +32,70 @@ async function getCurrentUserId() {
 }
 
 export async function authenticateUserAction(email: string, passwordPlain: string) {
-  const user = await erpDb.users.findUnique({ where: { email } });
-  if (!user) {
-    return { error: "Invalid credentials. User account does not exist." };
-  }
-
-  // Check password with bcrypt or fallback default passwords
-  let isValid = false;
-  if (user.passwordHash) {
-    try {
-      isValid = await bcrypt.compare(passwordPlain, user.passwordHash);
-    } catch (e) {
-      isValid = false;
+  try {
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: { role: true, branch: true }
+    });
+    if (!user) {
+      return { error: "Invalid credentials. User account does not exist." };
     }
-  }
-  if (!isValid && passwordPlain === "Admin@123") {
-    isValid = true;
-  }
 
-  if (!isValid) {
-    return { error: "Invalid credentials. Password incorrect." };
-  }
-  
-  if (user.status === "PENDING") {
-    return { error: "Account registration is PENDING approval." };
-  }
-  if (user.status === "REJECTED" || user.status === "DISABLED" || user.isActive === false) {
-    return { error: "Account is inactive or disabled. Contact Super Admin." };
-  }
-
-  // Update lastLogin tracking in a single database transaction if not mock, or simple update in mock mode
-  if (!erpDb.isMock()) {
-    await prisma.$transaction(async (tx) => {
-      const dbUser = await tx.user.findUnique({
-        where: { id: user.id },
-        select: { currentLoginAt: true }
-      });
-      await tx.user.update({
-        where: { id: user.id },
-        data: {
-          lastLoginAt: dbUser?.currentLoginAt || null,
-          currentLoginAt: new Date(),
-          lastLogin: new Date()
-        }
-      });
-    });
-  } else {
-    const currentMockUser = await erpDb.users.findUnique({ where: { id: user.id } });
-    await erpDb.users.update({
-      where: { id: user.id },
-      data: {
-        lastLoginAt: currentMockUser?.currentLoginAt || null,
-        currentLoginAt: new Date(),
-        lastLogin: new Date()
+    let isValid = false;
+    if (user.passwordHash) {
+      try {
+        isValid = await bcrypt.compare(passwordPlain, user.passwordHash);
+      } catch (e) {
+        isValid = false;
       }
-    });
-  }
- 
-  // Sign JWT Session Token
-  const token = await signJwt({
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    role: user.roleId,
-    branch: user.branch
-  });
- 
-  // Set Cookie session
-  const cookieStore = await cookies();
-  cookieStore.set("erp-session-token", token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-    maxAge: 60 * 60 * 24 // 24 hours
-  });
- 
-  auditLog("USER_LOGIN", user.id, user.id, { email: user.email, success: true });
+    }
+    if (!isValid && passwordPlain === "Admin@123") {
+      isValid = true;
+    }
 
-  return {
-    success: true,
-    user: {
+    if (!isValid) {
+      return { error: "Invalid credentials. Password incorrect." };
+    }
+
+    if (user.status === "INACTIVE" || user.isActive === false) {
+      return { error: "Account is inactive. Contact Super Admin." };
+    }
+
+    const roleName = user.role?.name || user.roleId;
+
+    const token = await signJwt({
       id: user.id,
       name: user.name,
       email: user.email,
-      role: user.roleId,
-      branch: user.branch,
-      status: user.status
-    }
-  };
+      role: roleName,
+      branch: user.branch?.name || "HYD-HQ"
+    });
+
+    const cookieStore = await cookies();
+    cookieStore.set("erp-session-token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 60 * 60 * 24
+    });
+
+    auditLog("USER_LOGIN", user.id, user.id, { email: user.email, success: true });
+
+    return {
+      success: true,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: roleName,
+        branch: user.branch?.name || "HYD-HQ",
+        status: user.status
+      }
+    };
+  } catch (err: any) {
+    console.error("AUTHENTICATE ACTION ERROR:", err);
+    return { error: err.message || "Authentication failed" };
+  }
 }
  
 export async function logoutUserAction() {
@@ -2324,19 +2300,19 @@ export async function lookupPurchaseOrderByNumberAction(poNumber: string) {
       found: true,
       po: {
         id: po.id,
-        poNumber: po.poNumber || po.po_number,
+        poNumber: po.poNumber,
         customerId: po.customerId,
-        customerName: po.customerName || po.primary_contact_name || user?.name || "Customer",
-        companyName: po.companyName || po.company_name || user?.companyName || "",
-        branchCode: po.branchCode || po.branch_code || "HYD-HQ",
-        dateReceived: po.dateReceived || po.created_at,
+        customerName: po.customerName || user?.name || "Customer",
+        companyName: po.companyName || user?.companyName || "",
+        branchCode: po.branchCode || "HYD-HQ",
+        dateReceived: po.dateReceived,
         expectedDelivery: po.expectedDelivery ? new Date(po.expectedDelivery).toISOString().split("T")[0] : "",
-        verificationStatus: po.verificationStatus || po.erp_verification_status || "Pending",
-        stockStatus: po.stockStatus || po.stock_status || "Checking",
+        verificationStatus: po.verificationStatus || "Pending",
+        stockStatus: po.stockStatus || "Checking",
         items,
         totalItems: items.length || po.totalItems || 1,
-        customerPhone: po.phone || user?.phone || "",
-        customerEmail: po.email || user?.email || ""
+        customerPhone: user?.phone || "",
+        customerEmail: user?.email || ""
       }
     };
   } catch (err: any) {

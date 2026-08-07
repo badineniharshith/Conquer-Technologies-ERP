@@ -71,10 +71,10 @@ export default function LoginPage() {
   const testCredentials = [
     { label: "Super Admin", email: "superadmin@conquererp.com", pass: "Admin@123", badge: "SUPER_ADMIN" },
     { label: "Director of Ops", email: "marcus.sterling@conquererp.com", pass: "Admin@123", badge: "DIRECTOR" },
-    { label: "Logistics Manager", email: "vikram.rao@conquererp.com", pass: "Admin@123", badge: "MANAGER" },
-    { label: "Assistant Manager", email: "ananya.sharma@conquererp.com", pass: "Admin@123", badge: "ASST_MGR" },
-    { label: "Ops Executive", email: "karan.patel@conquererp.com", pass: "Admin@123", badge: "EXECUTIVE" },
-    { label: "Customer (Oracle)", email: "procurement@oracle.com", pass: "Admin@123", badge: "CUSTOMER" },
+    { label: "Regional Manager", email: "rsm.south@conquererp.com", pass: "Admin@123", badge: "REGIONAL_MANAGER" },
+    { label: "Branch Manager", email: "bm.hyd@conquererp.com", pass: "Admin@123", badge: "BRANCH_MANAGER" },
+    { label: "Assistant Manager", email: "ananya.sharma@conquererp.com", pass: "Admin@123", badge: "ASSISTANT_MANAGER" },
+    { label: "Ops Executive", email: "karan.patel@conquererp.com", pass: "Admin@123", badge: "OPERATIONS_EXECUTIVE" },
   ];
 
   const containerVariants = {

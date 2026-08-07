@@ -1,6 +1,6 @@
-import { erpDb } from "@/lib/db";
+import { prisma } from "@/lib/db";
+import { serializeData } from "@/lib/serialize";
 import ProductMasterClient from "@/components/products/ProductMasterClient";
-import { getSeasonalPredictions } from "@/lib/predictions";
 
 export const dynamic = "force-dynamic";
 
@@ -10,9 +10,7 @@ interface PageProps {
     page?: string;
     brand?: string;
     category?: string;
-    availability?: string;
     status?: string;
-    priceRange?: string;
   }>;
 }
 
@@ -22,11 +20,8 @@ export default async function ProductsPage({ searchParams }: PageProps) {
   const page = Number(params.page || "1");
   const selectedBrand = params.brand || "All";
   const selectedCategory = params.category || "All";
-  const selectedAvailability = params.availability || "All";
   const selectedStatus = params.status || "All";
-  const selectedPriceRange = params.priceRange || "All";
 
-  // Build the DB where filter dynamically
   const whereClause: any = {};
 
   if (selectedBrand !== "All") {
@@ -39,8 +34,7 @@ export default async function ProductsPage({ searchParams }: PageProps) {
     whereClause.status = selectedStatus;
   }
 
-  // Handle Search Query directly in DB using indexes
-  let finalQuery = q.trim();
+  const finalQuery = q.trim();
   if (finalQuery) {
     whereClause.OR = [
       { name: { contains: finalQuery, mode: "insensitive" } },
@@ -49,32 +43,20 @@ export default async function ProductsPage({ searchParams }: PageProps) {
     ];
   }
 
-  const itemsPerPage = 10;
+  const itemsPerPage = 15;
 
-  // 1. Parallel fetch products (paginated) & categories
   const [productsData, totalFilteredCount, categories] = await Promise.all([
-    erpDb.products.findMany({
+    prisma.product.findMany({
       where: whereClause,
-      select: {
-        id: true,
-        sku: true,
-        name: true,
-        brand: true,
-        categoryId: true,
-        barcode: true,
-        safetyStock: true,
-        reorderLevel: true,
-        serialTracking: true,
-        status: true
+      include: {
+        category: true,
       },
+      orderBy: { createdAt: "desc" },
       take: itemsPerPage,
       skip: (page - 1) * itemsPerPage
     }),
-    erpDb.products.findMany({
-      where: whereClause,
-      select: { id: true }
-    }).then(list => list.length),
-    erpDb.categories.findMany({
+    prisma.product.count({ where: whereClause }),
+    prisma.category.findMany({
       select: {
         id: true,
         name: true
@@ -84,36 +66,28 @@ export default async function ProductsPage({ searchParams }: PageProps) {
 
   const paginatedSkus = productsData.map(p => p.sku);
 
-  // 2. Fetch inventory and prices ONLY for products on the current page (saves 99% database resources)
-  const [inventory, prices] = await Promise.all([
-    erpDb.inventory.findMany({
-      where: { sku: { in: paginatedSkus } },
-      select: {
-        sku: true,
-        branchCode: true,
-        quantity: true,
-        reservedQty: true
-      }
-    }),
-    erpDb.productPrices.findMany({
-      where: { sku: { in: paginatedSkus } },
-      select: {
-        sku: true,
-        branchCode: true,
-        sellingPrice: true
-      }
-    })
-  ]);
+  const inventory = await prisma.inventory.findMany({
+    where: { sku: { in: paginatedSkus } },
+    select: {
+      sku: true,
+      branchCode: true,
+      quantity: true,
+      availableQty: true,
+      reservedQty: true
+    }
+  });
 
-  const predictions = getSeasonalPredictions(productsData, categories);
+  const serializedProducts = serializeData<any[]>(productsData);
+  const serializedCategories = serializeData<any[]>(categories);
+  const serializedInventory = serializeData<any[]>(inventory);
 
   return (
     <ProductMasterClient
-      products={productsData}
-      categories={categories}
-      inventory={inventory}
-      prices={prices}
-      predictions={predictions}
+      products={serializedProducts}
+      categories={serializedCategories}
+      inventory={serializedInventory}
+      prices={[]}
+      predictions={[]}
       searchQueryString={q}
       correctedQueryString=""
       totalFilteredCount={totalFilteredCount}

@@ -5,12 +5,10 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
-  // Resolve params if promise
   const resolvedParams = await params;
   const { id } = resolvedParams;
 
   if (erpDb.isMock()) {
-    // Mock database logic
     const poRecord = await erpDb.purchaseOrders.findUnique({ where: { id } });
     if (!poRecord) {
       return NextResponse.json(
@@ -68,12 +66,12 @@ export async function GET(
       }
     });
   } else {
-    // Real PostgreSQL / Prisma database logic
     try {
+      const poId = !isNaN(Number(id)) ? Number(id) : id;
       const result = await prisma.$transaction(async (tx) => {
-        const poRecord = await tx.purchaseOrder.findUnique({
-          where: { id },
-          include: { user: true }
+        const poRecord = await (tx as any).purchaseOrder.findFirst({
+          where: typeof poId === 'number' ? { id: poId } : { poNumber: String(poId) },
+          include: { customer: true }
         });
 
         if (!poRecord) {
@@ -94,21 +92,17 @@ export async function GET(
         const lineItemsAudit = [];
 
         for (const item of requestedProducts) {
-          const invSum = await tx.inventory.aggregate({
-            _sum: {
-              availableStock: true
-            },
-            where: {
-              sku: item.sku
-            }
+          const invSum = await (tx as any).inventory.aggregate({
+            _sum: { availableStock: true },
+            where: { sku: item.sku }
           });
 
-          const itemNameRes = await tx.inventory.findFirst({
+          const itemNameRes = await (tx as any).inventory.findFirst({
             where: { sku: item.sku },
             select: { itemName: true }
           });
 
-          const totalAvailable = invSum._sum.availableStock || 0;
+          const totalAvailable = invSum._sum?.availableStock || 0;
           if (totalAvailable < item.quantity) {
             stockSufficient = false;
           }
@@ -122,21 +116,19 @@ export async function GET(
         }
 
         const computedStockState = stockSufficient ? 'Available' : 'Insufficient';
-        await tx.purchaseOrder.update({
-          where: { id },
+        await (tx as any).purchaseOrder.update({
+          where: { id: poRecord.id },
           data: { stockStatus: computedStockState }
         });
 
         return {
           id: poRecord.id,
           poNumber: poRecord.poNumber,
-          customerName: poRecord.customerName || poRecord.user?.name || "Premium Customer",
+          customerName: poRecord.customerName || poRecord.customer?.name || "Customer",
           currentStatus: poRecord.verificationStatus,
           isStockAvailable: stockSufficient,
           lineItems: lineItemsAudit
         };
-      }, {
-        isolationLevel: "RepeatableRead" // Enforce Repeatable Read snapshot isolation
       });
 
       return NextResponse.json({
