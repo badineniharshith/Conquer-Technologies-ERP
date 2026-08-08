@@ -2,29 +2,22 @@
 
 import { useErpStore } from "@/lib/store";
 import { logoutUserAction } from "@/app/actions";
-import logoImg from "../../../public/logo.png";
 import {
   Search,
   Bell,
   User,
-  Check,
   CheckCheck,
   LogOut,
   MapPin,
-  Menu
+  Menu,
+  ExternalLink
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
-  const router = useRouter();
-  const {
-    activeUser,
-    setCommandPaletteOpen,
-    logoutSession
-  } = useErpStore();
+  const { activeUser, setCommandPaletteOpen, logoutSession } = useErpStore();
 
   const [localNotis, setLocalNotis] = useState<any[]>([]);
   const [notiDropdownOpen, setNotiDropdownOpen] = useState(false);
@@ -32,21 +25,17 @@ export default function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
 
   const notiRef = useRef<HTMLDivElement>(null);
 
-  // Fetch real notifications from database
   useEffect(() => {
     if (activeUser) {
       fetch("/api/notifications")
-        .then(res => res.json())
-        .then(data => {
-          if (data.notifications) {
-            setLocalNotis(data.notifications);
-          }
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.notifications) setLocalNotis(data.notifications);
         })
-        .catch(err => console.error("Failed to load notifications:", err));
+        .catch((err) => console.error("Failed to load notifications:", err));
     }
   }, [activeUser]);
 
-  // Close notifications on outside click
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (notiRef.current && !notiRef.current.contains(event.target as Node)) {
@@ -65,10 +54,10 @@ export default function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
         body: JSON.stringify({ notificationId: id })
       });
       if (res.ok) {
-        setLocalNotis(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+        setLocalNotis((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
       }
     } catch (err) {
-      console.error("Failed to mark notification as read:", err);
+      console.error(err);
     }
   };
 
@@ -80,10 +69,10 @@ export default function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
         body: JSON.stringify({ markAll: true })
       });
       if (res.ok) {
-        setLocalNotis(prev => prev.map(n => ({ ...n, read: true })));
+        setLocalNotis((prev) => prev.map((n) => ({ ...n, read: true })));
       }
     } catch (err) {
-      console.error("Failed to mark all notifications as read:", err);
+      console.error(err);
     }
   };
 
@@ -91,102 +80,88 @@ export default function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
     if (loggingOut) return;
     setLoggingOut(true);
     try {
-      // 1. Clear the server-side JWT cookie first
       await logoutUserAction();
-      // 2. Clear the client-side Zustand store
       logoutSession();
       toast.success("Logged out successfully.");
-      // 3. Hard redirect to login (not router.push — this ensures full page reload + cookie cleared)
       window.location.href = "/login";
     } catch {
-      toast.error("Logout failed. Please try again.");
+      toast.error("Logout failed.");
       setLoggingOut(false);
     }
   };
 
-  const unreadCount = localNotis.filter(n => !n.read).length;
+  const unreadCount = localNotis.filter((n) => !n.read).length;
 
   return (
-    <header className="sticky top-0 z-30 h-16 w-full glass-navbar flex items-center justify-between px-4 sm:px-6">
-      {/* Mobile hamburger */}
+    <header className="sticky top-0 z-30 h-16 w-full bg-white/95 backdrop-blur-md border-b border-stone-200/80 shadow-2xs flex items-center justify-between px-4 sm:px-6">
+      {/* Mobile Menu Button */}
       <button
         onClick={onMenuClick}
-        className="lg:hidden p-2 rounded-xl text-stone-500 hover:bg-stone-100/80 transition-all duration-200 mr-2 cursor-pointer"
+        className="lg:hidden p-2 rounded-full text-stone-500 hover:bg-stone-100 transition-colors mr-2 cursor-pointer"
         aria-label="Toggle sidebar"
       >
         <Menu className="w-5 h-5" />
       </button>
 
-      {/* Mobile Brand Logo */}
-      <div className="lg:hidden flex items-center mr-2">
-        <img src={logoImg.src} alt="Conquer Logo" className="h-12 w-auto object-contain drop-shadow-sm" />
-      </div>
-
-      {/* Search Bar / Trigger Command Palette */}
+      {/* Search Input Pill */}
       <div className="flex-1 max-w-md">
-        <motion.button
+        <button
           onClick={() => setCommandPaletteOpen(true)}
-          whileHover={{ scale: 1.01 }}
-          whileTap={{ scale: 0.99 }}
-          className="w-full flex items-center justify-between px-3.5 py-2.5 bg-stone-50/80 border border-stone-200/60 rounded-xl text-stone-400 text-xs hover:border-orange-400/40 hover:bg-white/60 hover:shadow-sm transition-all duration-250 cursor-pointer"
+          className="w-full flex items-center justify-between px-4 py-2 bg-stone-100/70 border border-stone-200/80 rounded-full text-stone-400 text-xs hover:border-[#8c3120]/40 hover:bg-white transition-all cursor-pointer"
         >
           <div className="flex items-center space-x-2">
             <Search className="w-4 h-4 text-stone-400" />
-            <span>Search anything...</span>
+            <span className="font-medium">Search modules, products, customers...</span>
           </div>
-          <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[9px] font-semibold bg-stone-200/70 text-stone-500 rounded-md border border-stone-300/50">
+          <kbd className="hidden sm:inline-block px-2 py-0.5 text-[9px] font-bold font-mono bg-stone-200 text-stone-600 rounded-full border border-stone-300/50">
             /
           </kbd>
-        </motion.button>
+        </button>
       </div>
 
-      {/* Action Controls */}
+      {/* Right Actions */}
       <div className="flex items-center space-x-2 sm:space-x-3 ml-4">
-        {/* Visit CRM Button */}
+        {/* Visit CRM Pill Button */}
         <a
           href="https://conquer-crm.onrender.com/"
           target="_blank"
           rel="noopener noreferrer"
-          className="hidden md:inline-flex items-center space-x-1.5 px-3 py-1.5 bg-[#8c3120] text-white text-xs font-bold rounded-xl shadow-sm hover:bg-[#6c2417] transition-all"
+          className="hidden md:inline-flex items-center space-x-1.5 px-4 py-1.5 bg-[#8c3120] text-white text-xs font-bold rounded-full shadow-2xs hover:bg-[#a03828] transition-all cursor-pointer"
         >
           <span>Visit CRM</span>
+          <ExternalLink className="w-3 h-3" />
         </a>
 
-        {/* Notifications Center */}
+        {/* Notifications Bell Pill */}
         <div className="relative" ref={notiRef}>
-          <motion.button
+          <button
             onClick={() => setNotiDropdownOpen(!notiDropdownOpen)}
-            whileTap={{ scale: 0.92 }}
-            className="p-2.5 rounded-xl text-stone-500 hover:bg-stone-100/80 transition-all duration-200 relative cursor-pointer"
+            className="p-2 rounded-full text-stone-500 hover:bg-stone-100 transition-colors relative cursor-pointer"
             title="Notifications"
           >
-            <Bell className="w-[18px] h-[18px]" />
+            <Bell className="w-4 h-4" />
             {unreadCount > 0 && (
-              <motion.span
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center animate-badge-pulse"
-              >
+              <span className="absolute top-1 right-1 w-3.5 h-3.5 bg-rose-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center border-2 border-white">
                 {unreadCount}
-              </motion.span>
+              </span>
             )}
-          </motion.button>
+          </button>
 
           <AnimatePresence>
             {notiDropdownOpen && (
               <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: -4 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.97, y: -2 }}
-                transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                className="absolute right-0 mt-2 w-80 bg-white/95 backdrop-blur-lg border border-stone-200/70 rounded-xl shadow-xl py-1 z-50 origin-top-right"
+                initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 6, scale: 0.96 }}
+                transition={{ duration: 0.15 }}
+                className="absolute right-0 mt-2 w-80 bg-white border border-stone-200 rounded-2xl shadow-xl py-2 z-50 overflow-hidden"
               >
-                <div className="flex items-center justify-between px-4 py-2.5 border-b border-stone-100">
-                  <span className="text-xs font-bold uppercase tracking-wider text-stone-700">Notifications</span>
+                <div className="flex items-center justify-between px-4 py-2 border-b border-stone-100 bg-stone-50/50">
+                  <span className="text-xs font-bold uppercase text-stone-700 font-outfit">Notifications</span>
                   {unreadCount > 0 && (
                     <button
                       onClick={handleMarkAllAsRead}
-                      className="text-[10px] text-orange-600 font-semibold hover:underline flex items-center space-x-1 cursor-pointer"
+                      className="text-[10px] text-[#8c3120] font-bold hover:underline flex items-center space-x-1 cursor-pointer"
                     >
                       <CheckCheck className="w-3.5 h-3.5" />
                       <span>Mark all read</span>
@@ -197,22 +172,19 @@ export default function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
                 <div className="max-h-64 overflow-y-auto">
                   {localNotis.length === 0 ? (
                     <div className="px-4 py-6 text-center text-stone-400 text-xs italic">
-                      No new notifications
+                      No unread notifications
                     </div>
                   ) : (
-                    localNotis.map((noti, idx) => (
-                      <motion.div
+                    localNotis.map((noti) => (
+                      <div
                         key={noti.id}
-                        initial={{ opacity: 0, y: 4 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: idx * 0.03, duration: 0.25 }}
                         onClick={() => handleMarkAsRead(noti.id)}
-                        className={`px-4 py-2.5 border-b border-stone-50 cursor-pointer hover:bg-stone-50/70 transition-colors ${
-                          !noti.read ? "bg-orange-50/20" : ""
+                        className={`px-4 py-2.5 border-b border-stone-50 cursor-pointer hover:bg-stone-50 transition-colors ${
+                          !noti.read ? "bg-orange-50/30" : ""
                         }`}
                       >
                         <div className="flex items-start justify-between">
-                          <span className={`text-xs font-semibold ${!noti.read ? "text-orange-600" : "text-stone-700"}`}>
+                          <span className={`text-xs font-bold ${!noti.read ? "text-[#8c3120]" : "text-stone-700"}`}>
                             {noti.title}
                           </span>
                           <span className="text-[9px] text-stone-400">
@@ -222,7 +194,7 @@ export default function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
                         <p className="text-[11px] text-stone-500 mt-0.5 line-clamp-2 leading-relaxed">
                           {noti.message}
                         </p>
-                      </motion.div>
+                      </div>
                     ))
                   )}
                 </div>
@@ -231,35 +203,28 @@ export default function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
           </AnimatePresence>
         </div>
 
-        {/* User Profile Summary */}
-        <div className="flex items-center space-x-3 pl-3 sm:pl-4 border-l border-stone-200/50">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-100 to-orange-50 flex items-center justify-center text-orange-600 font-bold border border-orange-200/60 shadow-sm">
-            <User className="w-4 h-4" />
+        {/* User Pill Badge */}
+        <div className="flex items-center space-x-2.5 p-1 px-3 rounded-full bg-stone-50 border border-stone-200/80">
+          <div className="w-7 h-7 rounded-full bg-[#8c3120] text-white flex items-center justify-center text-xs font-extrabold shrink-0">
+            {activeUser?.name?.charAt(0) || "U"}
           </div>
-          <div className="hidden lg:flex flex-col">
-            <div className="flex items-center space-x-2">
-              <span className="text-xs font-bold text-stone-750">{activeUser?.name || "Guest User"}</span>
-              <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-[#8c3120]/10 text-[#8c3120] border border-[#8c3120]/25 uppercase tracking-wider">
-                {(activeUser?.role || "GUEST").replace(/_/g, " ")}
-              </span>
-            </div>
-            <span className="text-[9px] text-stone-400 flex items-center mt-0.5 font-medium">
-              <MapPin className="w-3 h-3 mr-0.5 text-stone-450" />
-              {activeUser?.branch || "Head Office"}
+          <div className="hidden lg:flex flex-col text-left pr-1 leading-tight">
+            <span className="text-xs font-bold text-stone-900 truncate max-w-[120px]">{activeUser?.name || "Staff User"}</span>
+            <span className="text-[9px] font-extrabold uppercase text-[#8c3120]">
+              {(activeUser?.role || "GUEST").replace(/_/g, " ")}
             </span>
           </div>
         </div>
 
-        {/* Logout */}
-        <motion.button
+        {/* Logout Button Pill */}
+        <button
           onClick={handleLogout}
           disabled={loggingOut}
-          whileTap={{ scale: 0.92 }}
-          className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-all duration-200 cursor-pointer disabled:opacity-50"
+          className="p-2 rounded-full text-rose-500 hover:bg-rose-50 transition-colors cursor-pointer disabled:opacity-50"
           title="Sign Out"
         >
-          <LogOut className="w-[18px] h-[18px]" />
-        </motion.button>
+          <LogOut className="w-4 h-4" />
+        </button>
       </div>
     </header>
   );

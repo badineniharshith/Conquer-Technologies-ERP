@@ -105,7 +105,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
     <div className="min-h-screen flex bg-stone-50 text-stone-900">
       {/* Sidebar (desktop fixed + mobile drawer) */}
       <Sidebar
-        mobileOpen={mobileOpen}
+        isMobileOpen={mobileOpen}
         onMobileClose={() => setMobileOpen(false)}
       />
 

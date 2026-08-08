@@ -4,22 +4,17 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useErpStore, UserRole } from "@/lib/store";
 import { logoutUserAction } from "@/app/actions";
-import logoImg from "../../../public/logo.png";
 import { toast } from "sonner";
-import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 import {
   LayoutDashboard,
   Boxes,
   PlusCircle,
-  DollarSign,
-  ArrowUpDown,
   FolderOpen,
   BarChart3,
   TrendingUp,
-  Sparkles,
-  Database,
+  ArrowUpDown,
   ChevronLeft,
   ChevronRight,
   X,
@@ -28,8 +23,8 @@ import {
   LogOut,
   ClipboardList,
   Target,
-  Briefcase,
-  ShieldCheck
+  ShieldCheck,
+  Building
 } from "lucide-react";
 
 interface MenuItem {
@@ -105,19 +100,16 @@ export const getMenuItems = (role: UserRole): MenuItem[] => {
   ];
 
   const items: Partial<Record<string, MenuItem[]>> = {
-    // L0 Admin
     SUPER_ADMIN: fullAdminMenu,
     ADMIN: fullAdminMenu,
     MANAGING_DIRECTOR: fullAdminMenu,
     MD: fullAdminMenu,
 
-    // ERP Ops roles - all get opsMenu
     DIRECTOR_OPERATIONS: opsMenu,
     OPERATIONS_MANAGER: opsMenu,
     ASSISTANT_MANAGER: opsMenu,
     OPERATIONS_EXECUTIVE: opsMenu,
 
-    // CRM / Sales roles - all get salesMenu
     SALES_DIRECTOR: salesMenu,
     DIRECTOR_OF_TECHNOLOGY: salesMenu,
     MARKETING_MANAGER: salesMenu,
@@ -134,291 +126,149 @@ export const getMenuItems = (role: UserRole): MenuItem[] => {
     PRESALES_CONSULTANT: salesMenu,
     INSIDE_SALES_MANAGER: salesMenu,
 
-    // External
-    CUSTOMER: customerMenu,
-
-    // Legacy
-    EMPLOYEE: salesMenu,
-    SALES_HEAD: salesMenu,
-    BRANCH_MANAGER: salesMenu,
-    SALES_MANAGER: salesMenu,
-    SALES_EXECUTIVE: salesMenu,
+    CUSTOMER: customerMenu
   };
 
-  return (items[role] || salesMenu) as MenuItem[];
+  return items[role] || fullAdminMenu;
 };
 
 interface SidebarProps {
-  mobileOpen?: boolean;
+  isMobileOpen?: boolean;
   onMobileClose?: () => void;
 }
 
-const navItemVariants = {
-  hidden: { opacity: 0, x: -12 },
-  visible: (i: number) => ({
-    opacity: 1,
-    x: 0,
-    transition: {
-      delay: i * 0.04,
-      duration: 0.35,
-      ease: [0.16, 1, 0.3, 1] as [number, number, number, number],
-    },
-  }),
-};
-
-export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
+export default function Sidebar({ isMobileOpen = false, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
-  const { activeRole, activeUser, logoutSession, sidebarCollapsed, setSidebarCollapsed } = useErpStore();
-  const [loggingOut, setLoggingOut] = useState(false);
+  const { activeUser, logoutSession, sidebarCollapsed, toggleSidebar } = useErpStore();
 
-  const items = getMenuItems(activeRole);
+  const userRole = (activeUser?.role as UserRole) || "SUPER_ADMIN";
+  const menuItems = getMenuItems(userRole);
 
-  const getActiveItem = (path: string, menuItems: MenuItem[]) => {
-    const sorted = [...menuItems].sort((a, b) => b.href.length - a.href.length);
-    for (const item of sorted) {
-      if (item.href === "/logout" || item.href === "/logout") continue;
-      if (path === item.href || (item.href !== "/dashboard" && path.startsWith(item.href + "/"))) {
-        return item.title;
-      }
-    }
-    if (path.startsWith("/dashboard")) {
-      return "Dashboard";
-    }
-    return null;
-  };
-
-  const activeItemTitle = getActiveItem(pathname, items);
-
-  const handleLogoutClick = async () => {
-    if (loggingOut) return;
-    setLoggingOut(true);
+  const handleLogout = async () => {
     try {
       await logoutUserAction();
       logoutSession();
       toast.success("Logged out successfully.");
       window.location.href = "/login";
     } catch {
-      toast.error("Logout failed. Please try again.");
-      setLoggingOut(false);
+      toast.error("Logout failed.");
     }
   };
 
-  const NavContent = () => (
-    <>
+  const navContent = (
+    <div className="flex flex-col h-full bg-white border-r border-stone-200/80 shadow-2xs">
       {/* Brand Header */}
-      <div className="h-16 flex items-center justify-between px-4 border-b border-stone-200/60 bg-white/80 backdrop-blur-sm flex-shrink-0">
-        {!sidebarCollapsed ? (
-          <motion.div
-            className="flex items-center space-x-2"
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          >
-            <img src={logoImg.src} alt="Conquer Logo" className="h-[58px] object-contain" />
-          </motion.div>
-        ) : (
-          <div className="flex justify-center w-full">
-            <img src={logoImg.src} alt="Conquer Logo" className="h-[52px] w-[52px] rounded-full object-cover" />
-          </div>
-        )}
-
-        {!sidebarCollapsed && (
-          <button
-            onClick={() => setSidebarCollapsed(true)}
-            className="text-stone-400 hover:text-stone-700 p-1.5 hover:bg-stone-100 rounded-lg transition-all duration-200 cursor-pointer hidden lg:block"
-          >
-            <ChevronLeft className="w-4.5 h-4.5" />
-          </button>
-        )}
-
-        {/* Mobile close button */}
-        {onMobileClose && (
-          <button
-            onClick={onMobileClose}
-            className="text-stone-400 hover:text-stone-700 p-1 hover:bg-stone-100 rounded-md transition-colors cursor-pointer lg:hidden"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        )}
+      <div className="p-4 border-b border-stone-100 flex items-center justify-between">
+        <Link href="/dashboard" className="flex items-center space-x-2">
+          <span className="text-xl font-black font-outfit text-[#8c3120] tracking-tight">
+            conquer<span className="text-xs align-top font-normal font-sans">®</span>
+          </span>
+          {!sidebarCollapsed && (
+            <span className="text-xs font-bold text-stone-500 font-outfit border-l border-stone-200 pl-2">
+              ERP Portal
+            </span>
+          )}
+        </Link>
+        <button
+          onClick={toggleSidebar}
+          className="hidden lg:flex p-1.5 rounded-full hover:bg-stone-100 text-stone-400 hover:text-stone-700 transition-colors cursor-pointer"
+          title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {sidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+        </button>
       </div>
 
-      {/* Navigation Items */}
-      <nav className="flex-1 mt-3 px-3 space-y-0.5 overflow-y-auto">
-        {items.map((item, index) => {
-          const isLogout = item.title === "Logout";
-          const active = item.title === activeItemTitle;
+      {/* Role / User Badge Banner */}
+      {!sidebarCollapsed && (
+        <div className="p-3 mx-3 mt-3 bg-stone-50 border border-stone-200/70 rounded-2xl flex items-center space-x-3">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#8c3120] to-[#b33e28] text-white flex items-center justify-center font-bold text-xs shadow-sm shrink-0">
+            {activeUser?.name?.charAt(0) || "E"}
+          </div>
+          <div className="truncate">
+            <span className="font-bold text-xs text-stone-900 block truncate">{activeUser?.name || "Employee"}</span>
+            <span className="text-[10px] text-[#8c3120] font-extrabold uppercase tracking-wider block">
+              {(activeUser?.role || "STAFF").replace(/_/g, " ")}
+            </span>
+          </div>
+        </div>
+      )}
 
-          if (sidebarCollapsed) {
-            return (
-              <motion.div
-                key={item.title}
-                custom={index}
-                variants={navItemVariants}
-                initial="hidden"
-                animate="visible"
-                className="relative group flex justify-center py-0.5"
-              >
-                {isLogout ? (
-                  <button
-                    onClick={handleLogoutClick}
-                    className="p-2.5 rounded-xl flex items-center justify-center transition-all duration-200 hover:bg-rose-50 text-rose-500 w-10 h-10 cursor-pointer"
-                  >
-                    <item.icon className="w-[18px] h-[18px]" />
-                  </button>
-                ) : (
-                  <Link
-                    href={item.href}
-                    onClick={onMobileClose}
-                    className="relative p-2.5 rounded-xl flex items-center justify-center transition-all duration-200 w-10 h-10"
-                  >
-                    {active && (
-                      <motion.div
-                        layoutId="activeNavCollapsed"
-                        className="absolute inset-0 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl shadow-md shadow-orange-500/20"
-                        transition={{ type: "spring", stiffness: 350, damping: 30 }}
-                      />
-                    )}
-                    <span className={`relative z-10 ${active ? "text-white" : "text-stone-500 hover:text-stone-900"}`}>
-                      <item.icon className="w-[18px] h-[18px]" />
-                    </span>
-                  </Link>
-                )}
-                {/* Tooltip */}
-                <div className="absolute left-full ml-2.5 px-2.5 py-1.5 bg-stone-900 text-white text-[11px] font-medium rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none whitespace-nowrap z-50 shadow-lg translate-x-1 group-hover:translate-x-0">
-                  {item.title}
-                  <div className="absolute right-full top-1/2 -translate-y-1/2 w-0 h-0 border-t-[5px] border-t-transparent border-b-[5px] border-b-transparent border-r-[5px] border-r-stone-900" />
-                </div>
-              </motion.div>
-            );
-          }
+      {/* Nav Menu Links */}
+      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+        {menuItems.map((item) => {
+          if (item.href === "/logout") return null;
+          const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+          const Icon = item.icon;
 
           return (
-            <motion.div
-              key={item.title}
-              custom={index}
-              variants={navItemVariants}
-              initial="hidden"
-              animate="visible"
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={onMobileClose}
+              className={`flex items-center space-x-3 px-3.5 py-2.5 rounded-2xl text-xs transition-all duration-200 font-bold ${
+                isActive
+                  ? "bg-[#8c3120]/10 text-[#8c3120] border border-[#8c3120]/20 shadow-2xs"
+                  : "text-stone-600 hover:bg-stone-100/80 hover:text-stone-900"
+              }`}
             >
-              {isLogout ? (
-                <button
-                  onClick={handleLogoutClick}
-                  className="flex w-full items-center px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 hover:bg-rose-50 text-rose-500 cursor-pointer"
-                >
-                  <item.icon className="w-[18px] h-[18px] mr-3 flex-shrink-0 text-rose-500" />
-                  <span className="truncate">Logout</span>
-                </button>
-              ) : (
-                <Link
-                  href={item.href}
-                  onClick={onMobileClose}
-                  className="relative flex items-center px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200"
-                >
-                  {active && (
-                    <motion.div
-                      layoutId="activeNav"
-                      className="absolute inset-0 bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl shadow-sm shadow-orange-500/20"
-                      transition={{ type: "spring", stiffness: 350, damping: 30 }}
-                    />
-                  )}
-                  <span className={`relative z-10 flex items-center ${active ? "text-white font-semibold" : "text-stone-600 hover:text-stone-900"}`}>
-                    <item.icon className={`w-[18px] h-[18px] mr-3 flex-shrink-0 ${active ? "text-white" : "text-stone-400"}`} />
-                    <span className="truncate">{item.title}</span>
-                  </span>
-                </Link>
-              )}
-            </motion.div>
+              <Icon className={`w-4 h-4 shrink-0 ${isActive ? "text-[#8c3120]" : "text-stone-400"}`} />
+              {!sidebarCollapsed && <span className="truncate">{item.title}</span>}
+            </Link>
           );
         })}
       </nav>
 
-      {/* Footer */}
-      <div className="flex-shrink-0 p-3 border-t border-stone-200/60 bg-white/60 backdrop-blur-sm">
-        <AnimatePresence mode="wait">
-          {!sidebarCollapsed ? (
-            <motion.div
-              key="expanded"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="flex items-center justify-between"
-            >
-              <div className="flex flex-col min-w-0 flex-1 mr-2">
-                <span className="text-[10px] text-stone-400 uppercase tracking-wider font-semibold">Signed in as</span>
-                <span className="text-xs font-bold text-orange-600 truncate">{activeUser?.name || "User"}</span>
-                <span className="text-[10px] text-stone-500 truncate">{activeRole.replace(/_/g, " ")}</span>
-              </div>
-              <button
-                onClick={() => setSidebarCollapsed(true)}
-                className="text-stone-400 hover:text-stone-700 p-1.5 hover:bg-stone-100 rounded-lg transition-all duration-200 cursor-pointer hidden lg:block flex-shrink-0"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-            </motion.div>
-          ) : (
-            <motion.div
-              key="collapsed"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              <button
-                onClick={() => setSidebarCollapsed(false)}
-                className="w-full text-stone-400 hover:text-stone-700 p-2 hover:bg-stone-100 rounded-lg transition-all duration-200 flex justify-center cursor-pointer"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
+      {/* Bottom Logout Button */}
+      <div className="p-3 border-t border-stone-100">
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+        >
+          <LogOut className="w-4 h-4 shrink-0 text-rose-500" />
+          {!sidebarCollapsed && <span>Logout</span>}
+        </button>
       </div>
-    </>
+    </div>
   );
 
   return (
     <>
-      {/* Desktop Sidebar — always fixed */}
-      <motion.aside
-        animate={{ width: sidebarCollapsed ? 64 : 256 }}
-        transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-        className="fixed top-0 left-0 z-40 h-screen glass-sidebar text-[#57534e] flex-col hidden lg:flex"
-      >
-        <NavContent />
-      </motion.aside>
+      {/* Desktop Sidebar */}
+      <aside className={`hidden lg:block fixed left-0 top-0 h-screen z-40 transition-all duration-300 ${
+        sidebarCollapsed ? "w-20" : "w-64"
+      }`}>
+        {navContent}
+      </aside>
 
-      {/* Mobile Sidebar — slide-in drawer */}
-      <>
-        {/* Backdrop */}
-        <AnimatePresence>
-          {mobileOpen && (
+      {/* Mobile Drawer */}
+      <AnimatePresence>
+        {isMobileOpen && (
+          <div className="lg:hidden fixed inset-0 z-50 flex">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.25 }}
-              className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs lg:hidden"
               onClick={onMobileClose}
-              aria-hidden="true"
+              className="fixed inset-0 bg-black/50 backdrop-blur-xs"
             />
-          )}
-        </AnimatePresence>
-        {/* Drawer */}
-        <AnimatePresence>
-          {mobileOpen && (
-            <motion.aside
+            <motion.div
               initial={{ x: "-100%" }}
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
-              transition={{ type: "spring", stiffness: 300, damping: 30 }}
-              className="fixed top-0 left-0 z-50 h-screen w-64 glass-sidebar text-[#57534e] flex flex-col lg:hidden"
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              className="relative w-64 max-w-full h-full bg-white shadow-2xl z-50"
             >
-              <NavContent />
-            </motion.aside>
-          )}
-        </AnimatePresence>
-      </>
+              <button
+                onClick={onMobileClose}
+                className="absolute top-4 right-4 p-1 rounded-full bg-stone-100 text-stone-500 hover:text-stone-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              {navContent}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </>
   );
 }

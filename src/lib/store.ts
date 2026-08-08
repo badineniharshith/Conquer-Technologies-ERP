@@ -68,6 +68,7 @@ interface ErpStore {
   toggleTheme: () => void;
   sidebarCollapsed: boolean;
   setSidebarCollapsed: (collapsed: boolean) => void;
+  toggleSidebar: () => void;
   commandPaletteOpen: boolean;
   setCommandPaletteOpen: (open: boolean) => void;
   globalSearchQuery: string;
@@ -100,6 +101,7 @@ export const useErpStore = create<ErpStore>((set) => ({
   toggleTheme: () => set((state) => ({ theme: state.theme === "light" ? "dark" : "light" })),
   sidebarCollapsed: false,
   setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
+  toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
   commandPaletteOpen: false,
   setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
   globalSearchQuery: "",
