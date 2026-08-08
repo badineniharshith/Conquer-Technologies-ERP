@@ -192,6 +192,10 @@ export default function OrgHierarchyPage() {
   const renderNode = (node: TreeNode, depth: number = 0) => {
     const hasChildren = node.children && node.children.length > 0;
     const isExpanded = !!expandedNodes[node.id];
+    const effectiveRole = node.roleName || node.role?.name || node.roleId;
+    const isOpsExec = effectiveRole === "OPERATIONS_EXECUTIVE";
+    const hasCustomers = isOpsExec && node.customers && node.customers.length > 0;
+    const hasExpandable = hasChildren || hasCustomers;
 
     return (
       <div key={node.id} className="relative pl-4 sm:pl-8 mt-3 border-l-2 border-stone-200/70 last:border-l-transparent">
@@ -202,7 +206,7 @@ export default function OrgHierarchyPage() {
           }`}
         >
           <div className="flex items-center space-x-3 min-w-0">
-            {hasChildren ? (
+            {hasExpandable ? (
               <button
                 type="button"
                 onClick={(e) => toggleExpand(node.id, e)}
@@ -246,18 +250,76 @@ export default function OrgHierarchyPage() {
                 <span>{node.children.length}</span>
               </span>
             )}
+            {hasCustomers && (
+              <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center space-x-1">
+                <Building className="w-3 h-3 text-emerald-500" />
+                <span>{node.customers!.length} clients</span>
+              </span>
+            )}
           </div>
         </div>
 
         <AnimatePresence>
-          {isExpanded && hasChildren && (
+          {isExpanded && hasExpandable && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
               className="overflow-hidden"
             >
-              {node.children.map(child => renderNode(child, depth + 1))}
+              {/* Render child employees */}
+              {hasChildren && node.children.map(child => renderNode(child, depth + 1))}
+
+              {/* Render assigned customers under L4 Ops Executive */}
+              {hasCustomers && (
+                <div className="pl-4 sm:pl-8 mt-3 space-y-2">
+                  <div className="flex items-center space-x-2 mb-2 px-1">
+                    <Building className="w-3.5 h-3.5 text-emerald-600" />
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                      Assigned Corporate Clients ({node.customers!.length})
+                    </span>
+                    <div className="flex-1 h-px bg-emerald-200" />
+                  </div>
+                  {node.customers!.map((cust: any) => (
+                    <div
+                      key={cust.id}
+                      className="flex items-center justify-between p-3 bg-emerald-50/60 border border-emerald-200/70 rounded-xl shadow-xs hover:bg-emerald-50 hover:border-emerald-300 transition-all"
+                    >
+                      <div className="flex items-center space-x-3 min-w-0">
+                        <div className="w-8 h-8 rounded-lg bg-emerald-100 border border-emerald-200 flex items-center justify-center text-xs font-black text-emerald-700 shrink-0">
+                          {cust.name?.charAt(0) || "C"}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center space-x-1.5">
+                            <span className="font-bold text-stone-800 text-xs truncate">{cust.name || cust.company}</span>
+                            {cust.customerCode && (
+                              <span className="text-[9px] font-mono font-semibold bg-stone-100 text-stone-500 px-1.5 py-0.5 rounded border border-stone-200">
+                                {cust.customerCode}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-stone-400 truncate flex items-center space-x-1.5">
+                            {cust.email && <span>{cust.email}</span>}
+                            {cust.city && <span>• {cust.city}{cust.state ? `, ${cust.state}` : ""}</span>}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2 shrink-0 ml-2">
+                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${
+                          cust.customerType === "ENTERPRISE" ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-stone-50 text-stone-600 border-stone-200"
+                        }`}>
+                          {cust.customerType || "ENTERPRISE"}
+                        </span>
+                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${
+                          cust.status === "ACTIVE" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-stone-50 text-stone-500 border-stone-200"
+                        }`}>
+                          {cust.status || "ACTIVE"}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>

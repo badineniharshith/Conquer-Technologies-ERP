@@ -69,10 +69,8 @@ export default function Header() {
         
         {/* Left Logo */}
         <div className="flex items-center space-x-3 shrink-0">
-          <Link href="/dashboard" className="flex items-center space-x-2.5 group">
-            <span className="text-xl font-extrabold tracking-tight font-outfit text-[#8c3120]">
-              conquer<span className="text-xs align-top font-normal font-sans">®</span>
-            </span>
+          <Link href="/dashboard" className="flex items-center space-x-3 group">
+            <img src="/logo.png" alt="Conquer Logo" className="h-9 w-auto object-contain drop-shadow-xs" />
             <span className="text-stone-300 font-light text-lg">|</span>
             <span className="text-xs sm:text-sm font-bold text-stone-900 tracking-tight font-outfit whitespace-nowrap">
               VConquer <span className="text-stone-500 font-normal">Corporate Portal</span>

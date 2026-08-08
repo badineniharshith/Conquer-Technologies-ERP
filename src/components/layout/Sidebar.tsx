@@ -37,10 +37,6 @@ export const getMenuItems = (role: UserRole): MenuItem[] => {
   const fullAdminMenu: MenuItem[] = [
     { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { title: "Customers Master", href: "/customers", icon: Users },
-    { title: "Allocated Stock", href: "/allocated-stock", icon: Boxes },
-    { title: "Orders History", href: "/orders", icon: ClipboardList },
-    { title: "Assets & Warranties", href: "/assets-warranties", icon: ShieldCheck },
-    { title: "Assign Corporate Users", href: "/assign-users", icon: Users },
     { title: "Products Catalog", href: "/products", icon: PlusCircle },
     { title: "Categories", href: "/categories", icon: FolderOpen },
     { title: "Price History", href: "/price-history", icon: TrendingUp },
@@ -57,10 +53,6 @@ export const getMenuItems = (role: UserRole): MenuItem[] => {
   const salesMenu: MenuItem[] = [
     { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { title: "Customers Master", href: "/customers", icon: Users },
-    { title: "Allocated Stock", href: "/allocated-stock", icon: Boxes },
-    { title: "Orders History", href: "/orders", icon: ClipboardList },
-    { title: "Assets & Warranties", href: "/assets-warranties", icon: ShieldCheck },
-    { title: "Assign Corporate Users", href: "/assign-users", icon: Users },
     { title: "Org Hierarchy", href: "/settings/hierarchy", icon: Target },
     { title: "Logout", href: "/logout", icon: LogOut },
   ];
@@ -68,10 +60,6 @@ export const getMenuItems = (role: UserRole): MenuItem[] => {
   const opsMenu: MenuItem[] = [
     { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { title: "Customers Master", href: "/customers", icon: Users },
-    { title: "Allocated Stock", href: "/allocated-stock", icon: Boxes },
-    { title: "Orders History", href: "/orders", icon: ClipboardList },
-    { title: "Assets & Warranties", href: "/assets-warranties", icon: ShieldCheck },
-    { title: "Assign Corporate Users", href: "/assign-users", icon: Users },
     { title: "Products Catalog", href: "/products", icon: PlusCircle },
     { title: "Categories", href: "/categories", icon: FolderOpen },
     { title: "Price History", href: "/price-history", icon: TrendingUp },
@@ -160,9 +148,7 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
       {/* Brand Header */}
       <div className="p-4 border-b border-stone-100 flex items-center justify-between">
         <Link href="/dashboard" className="flex items-center space-x-2">
-          <span className="text-xl font-black font-outfit text-[#8c3120] tracking-tight">
-            conquer<span className="text-xs align-top font-normal font-sans">®</span>
-          </span>
+          <img src="/logo.png" alt="Conquer Logo" className="h-9 w-auto object-contain drop-shadow-xs" />
           {!sidebarCollapsed && (
             <span className="text-xs font-bold text-stone-500 font-outfit border-l border-stone-200 pl-2">
               ERP Portal

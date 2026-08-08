@@ -164,10 +164,31 @@ export async function GET(req: NextRequest) {
           .filter((u, index, self) => self.findIndex(t => t.id === u.id) === index)
           .map(u => {
             const kids = buildTree(u.id);
+            // Attach customers to L4 Operations Executive nodes
+            const isOpsExec = (u.roleName === "OPERATIONS_EXECUTIVE");
+            let assignedCustomers: any[] = [];
+            if (isOpsExec) {
+              assignedCustomers = allCustomers
+                .filter(c => c.operationsExecutiveId === u.id || c.assignedUserId === u.id)
+                .map(c => ({
+                  id: c.id,
+                  name: c.name,
+                  email: c.email,
+                  phone: c.phone,
+                  customerCode: c.customerCode,
+                  company: c.company || c.name,
+                  city: c.city,
+                  state: c.state,
+                  customerType: c.customerType,
+                  status: c.status,
+                  isCustomerNode: true,
+                }));
+            }
             return {
               ...u,
               children: kids,
-              subordinates: kids
+              subordinates: kids,
+              customers: assignedCustomers,
             };
           });
       };

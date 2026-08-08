@@ -10,10 +10,15 @@ const outfit = Outfit({
 });
 
 export const metadata: Metadata = {
-  title: "Conquer ERP - Enterprise Management System",
+  title: "Conquer Technologies | VConquer Enterprise Portal",
   description: "Next-generation production grade enterprise planning control panel.",
   icons: {
-    icon: "/logo.png",
+    icon: [
+      { url: "/logo.png", href: "/logo.png" },
+      { url: "/favicon.ico", href: "/favicon.ico" }
+    ],
+    shortcut: "/logo.png",
+    apple: "/logo.png",
   },
 };
 
