@@ -237,7 +237,12 @@ export default function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
             <User className="w-4 h-4" />
           </div>
           <div className="hidden lg:flex flex-col">
-            <span className="text-xs font-bold text-stone-750">{activeUser?.name || "Guest User"}</span>
+            <div className="flex items-center space-x-2">
+              <span className="text-xs font-bold text-stone-750">{activeUser?.name || "Guest User"}</span>
+              <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-[#8c3120]/10 text-[#8c3120] border border-[#8c3120]/25 uppercase tracking-wider">
+                {(activeUser?.role || "GUEST").replace(/_/g, " ")}
+              </span>
+            </div>
             <span className="text-[9px] text-stone-400 flex items-center mt-0.5 font-medium">
               <MapPin className="w-3 h-3 mr-0.5 text-stone-450" />
               {activeUser?.branch || "Head Office"}

@@ -7,7 +7,8 @@ import {
   verifyPurchaseOrderAction, 
   createPurchaseOrderAction,
   lookupPurchaseOrderByNumberAction,
-  getProductPriceAction
+  getProductPriceAction,
+  getNextPoNumberAction
 } from "@/app/actions";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -209,7 +210,10 @@ export default function PurchaseOrdersClient({
       if (res.error) {
         toast.error(res.error);
       } else {
-        toast.success(`✅ PO verified successfully! Opportunity ${res.opportunityNumber} created. Stock reserved.`);
+        toast.success(`✅ PO verified successfully! Opportunity ${res.opportunityNumber} created.`);
+        if (res.warning) {
+          toast.warning(res.warning, { duration: 8000 });
+        }
         router.refresh();
       }
     } catch (e: any) {
@@ -263,6 +267,16 @@ export default function PurchaseOrdersClient({
     } finally {
       setCreateLoading(false);
     }
+  };
+
+  const handleOpenCreateModal = async () => {
+    setModalOpen(true);
+    try {
+      const res = await getNextPoNumberAction();
+      if (res?.poNumber) {
+        setNewPoNumber(res.poNumber);
+      }
+    } catch {}
   };
 
   const resetForm = () => {
@@ -340,7 +354,7 @@ export default function PurchaseOrdersClient({
 
         {isStaff && (
           <motion.button
-            onClick={() => setModalOpen(true)}
+            onClick={handleOpenCreateModal}
             whileHover={{ scale: 1.02, y: -1 }}
             whileTap={{ scale: 0.97 }}
             className="px-4 py-2.5 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-bold text-xs rounded-xl shadow-md shadow-orange-500/15 transition-all flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"

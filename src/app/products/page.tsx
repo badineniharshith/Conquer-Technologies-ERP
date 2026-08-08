@@ -43,7 +43,7 @@ export default async function ProductsPage({ searchParams }: PageProps) {
     ];
   }
 
-  const itemsPerPage = 15;
+  const itemsPerPage = 50;
 
   const [productsData, totalFilteredCount, categories] = await Promise.all([
     prisma.product.findMany({

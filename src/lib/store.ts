@@ -1,13 +1,33 @@
 import { create } from "zustand";
 
 export type UserRole =
+  // ERP Roles (5 operational roles)
   | "SUPER_ADMIN"
+  | "ADMIN"
   | "DIRECTOR_OPERATIONS"
   | "OPERATIONS_MANAGER"
   | "ASSISTANT_MANAGER"
   | "OPERATIONS_EXECUTIVE"
+  // CRM / Sales Roles
+  | "MANAGING_DIRECTOR"
+  | "SALES_DIRECTOR"
+  | "DIRECTOR_OF_TECHNOLOGY"
+  | "MARKETING_MANAGER"
+  | "POST_SALES_MANAGER"
+  | "BUSINESS_MANAGER"
+  | "PRESALES_MANAGER"
+  | "REGIONAL_SALES_MANAGER"
+  | "KEY_ACCOUNT_MANAGER"
+  | "INSIDE_SALES_MANAGER"
+  | "ASST_MARKETING_MANAGER"
+  | "TEAM_LEAD"
+  | "TELECALLER"
+  | "FRONT_END_OPERATOR"
+  | "SENIOR_PRESALES_LEAD"
+  | "PRESALES_CONSULTANT"
+  // External
   | "CUSTOMER"
-  | "ADMIN"
+  // Legacy / backward-compat
   | "EMPLOYEE"
   | "SALES_HEAD"
   | "REGIONAL_SALES_MANAGER"

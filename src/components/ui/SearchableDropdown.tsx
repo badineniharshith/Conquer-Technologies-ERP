@@ -6,6 +6,8 @@ import { Search, ChevronDown, Loader2 } from "lucide-react";
 interface Option {
   value: string;
   label: string;
+  group?: string;
+  isHeader?: boolean;
 }
 
 interface SearchableDropdownProps {
@@ -34,10 +36,10 @@ export default function SearchableDropdown({
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const selectedOption = options.find((opt) => opt.value === value);
+  const selectedOption = options.find((opt) => opt.value === value && !opt.isHeader);
 
   const filteredOptions = options.filter((opt) =>
-    opt.label.toLowerCase().includes(search.toLowerCase())
+    opt.label.toLowerCase().includes(search.toLowerCase()) || opt.isHeader
   );
 
   // Reset active index whenever filtered list changes or when dropdown opens
@@ -69,25 +71,27 @@ export default function SearchableDropdown({
       return;
     }
 
+    const selectableOptions = filteredOptions.filter(o => !o.isHeader);
+
     switch (e.key) {
       case "ArrowDown":
         e.preventDefault();
         setActiveIndex((prev) =>
-          prev < filteredOptions.length - 1 ? prev + 1 : 0
+          prev < selectableOptions.length - 1 ? prev + 1 : 0
         );
         break;
       case "ArrowUp":
         e.preventDefault();
         setActiveIndex((prev) =>
-          prev > 0 ? prev - 1 : filteredOptions.length - 1
+          prev > 0 ? prev - 1 : selectableOptions.length - 1
         );
         break;
       case "Enter":
         e.preventDefault();
-        if (activeIndex >= 0 && activeIndex < filteredOptions.length) {
-          handleSelect(filteredOptions[activeIndex].value);
-        } else if (filteredOptions.length > 0) {
-          handleSelect(filteredOptions[0].value);
+        if (activeIndex >= 0 && activeIndex < selectableOptions.length) {
+          handleSelect(selectableOptions[activeIndex].value);
+        } else if (selectableOptions.length > 0) {
+          handleSelect(selectableOptions[0].value);
         }
         break;
       case "Escape":
@@ -165,7 +169,7 @@ export default function SearchableDropdown({
 
           <div
             ref={listRef}
-            className="max-h-56 overflow-y-auto p-1.5 space-y-1 bg-white"
+            className="max-h-60 overflow-y-auto p-1.5 space-y-1 bg-white"
           >
             {filteredOptions.length === 0 ? (
               <div className="px-4 py-3 text-center text-stone-400 italic text-[11px]">
@@ -173,18 +177,29 @@ export default function SearchableDropdown({
               </div>
             ) : (
               filteredOptions.map((opt, index) => {
+                if (opt.isHeader) {
+                  return (
+                    <div
+                      key={`header-${opt.label}-${index}`}
+                      className="px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-orange-600 bg-orange-50/80 rounded-lg mt-1"
+                    >
+                      {opt.label}
+                    </div>
+                  );
+                }
                 const isSelected = opt.value === value;
-                const isActive = index === activeIndex;
                 return (
                   <button
                     key={opt.value}
                     type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleSelect(opt.value);
+                    }}
                     onClick={() => handleSelect(opt.value)}
                     className={`w-full text-left px-3 py-2 rounded-xl text-xs transition-all flex items-center justify-between ${
                       isSelected
                         ? "bg-orange-500 text-white font-bold shadow-md shadow-orange-550/15"
-                        : isActive
-                        ? "bg-orange-550/10 text-orange-700 font-semibold"
                         : "hover:bg-stone-50 text-stone-700 hover:text-stone-900 font-medium"
                     }`}
                   >

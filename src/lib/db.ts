@@ -314,11 +314,11 @@ export const erpDb = {
     findMany: async (args?: any) => {
       if (isDatabaseConnected()) {
         try {
-          const erpUsers = await (prisma as any).erpUser.findMany({
+          const dbUsers = await prisma.user.findMany({
             ...args,
-            include: { employee: true, branch: true }
+            include: { role: true, branch: true }
           });
-          return erpUsers.map(mapDbUser);
+          return dbUsers.map(mapDbUser);
         } catch (e) {
           // Fallback
         }
@@ -328,19 +328,11 @@ export const erpDb = {
     findUnique: async (args: { where: { id?: string; email?: string } }) => {
       if (isDatabaseConnected()) {
         try {
-          const erpUser = await (prisma as any).erpUser.findUnique({
+          const dbUser = await prisma.user.findUnique({
             where: args.where as any,
-            include: { employee: true, branch: true }
+            include: { role: true, branch: true }
           });
-          if (erpUser) return mapDbUser({ ...erpUser, employee: erpUser.employee });
-        } catch (e) {}
-
-        try {
-          const crmUser = await (prisma as any).crmUser.findUnique({
-            where: args.where as any,
-            include: { employee: true }
-          });
-          if (crmUser) return mapDbUser({ ...crmUser, name: crmUser.fullName, roleId: String(crmUser.roleId), employee: crmUser.employee });
+          if (dbUser) return mapDbUser(dbUser);
         } catch (e) {}
       }
       if (args.where.id) return mockStore.users.find(u => u.id === args.where.id) || null;
@@ -353,7 +345,7 @@ export const erpDb = {
           const data = { ...args.data };
           if (data.branch && typeof data.branch === "string") {
             data.branchName = data.branch;
-            const foundBranch = await (prisma as any).branch.findFirst({ where: { name: { contains: data.branch, mode: 'insensitive' } } });
+            const foundBranch = await prisma.branch.findFirst({ where: { name: { contains: data.branch, mode: 'insensitive' } } });
             if (foundBranch) {
               data.branchId = foundBranch.id;
             }
@@ -362,7 +354,7 @@ export const erpDb = {
           if (data.status) {
             data.isActive = data.status === "ACTIVE";
           }
-          const created = await (prisma as any).erpUser.create({ data, include: { employee: true, branch: true } });
+          const created = await prisma.user.create({ data, include: { role: true, branch: true } });
           return mapDbUser(created);
         } catch (e) {}
       }
@@ -376,7 +368,7 @@ export const erpDb = {
           const data = { ...args.data };
           if (data.branch && typeof data.branch === "string") {
             data.branchName = data.branch;
-            const foundBranch = await (prisma as any).branch.findFirst({ where: { name: { contains: data.branch, mode: 'insensitive' } } });
+            const foundBranch = await prisma.branch.findFirst({ where: { name: { contains: data.branch, mode: 'insensitive' } } });
             if (foundBranch) {
               data.branchId = foundBranch.id;
             }
@@ -385,10 +377,10 @@ export const erpDb = {
           if (data.status) {
             data.isActive = data.status === "ACTIVE";
           }
-          const updated = await (prisma as any).erpUser.update({
+          const updated = await prisma.user.update({
             where: { id: args.where.id },
             data,
-            include: { employee: true, branch: true }
+            include: { role: true, branch: true }
           });
           return mapDbUser(updated);
         } catch (e) {}
@@ -401,14 +393,13 @@ export const erpDb = {
     delete: async (args: { where: { id: string } }) => {
       if (isDatabaseConnected()) {
         try {
-          const custId = !isNaN(Number(args.where.id)) ? Number(args.where.id) : args.where.id;
-          await (prisma as any).stockReservation.deleteMany({
-            where: typeof custId === 'number' ? { customerId: custId } : { id: args.where.id }
+          await prisma.stockReservation.deleteMany({
+            where: { customerId: args.where.id }
           });
-          await (prisma as any).notification.deleteMany({
+          await prisma.notification.deleteMany({
             where: { userId: args.where.id }
           });
-          return await (prisma as any).erpUser.delete({
+          return await prisma.user.delete({
             where: { id: args.where.id }
           });
         } catch (e) {}
@@ -426,6 +417,11 @@ export const erpDb = {
 
   roles: {
     findMany: async () => {
+      if (isDatabaseConnected()) {
+        try {
+          return await prisma.role.findMany({ orderBy: { name: "asc" } });
+        } catch (e) {}
+      }
       return mockStore.roles;
     }
   },
@@ -559,9 +555,9 @@ export const erpDb = {
   stockReservations: {
     findMany: async (args?: any) => {
       if (isDatabaseConnected()) {
-        return await (prisma as any).stockReservation.findMany({
+        return await prisma.stockReservation.findMany({
           ...args,
-          include: { user: true, product: true, items: { include: { product: true } } }
+          include: { customer: true, employee: true, product: true, items: { include: { product: true } } }
         });
       }
       return mockFindMany("stockReservations", args).map(res => ({
@@ -576,9 +572,9 @@ export const erpDb = {
     },
     findUnique: async (args: { where: { id: string } }) => {
       if (isDatabaseConnected()) {
-        return await (prisma as any).stockReservation.findUnique({
+        return await prisma.stockReservation.findUnique({
           where: { id: args.where.id },
-          include: { user: true, product: true, items: { include: { product: true } } }
+          include: { customer: true, employee: true, product: true, items: { include: { product: true } } }
         });
       }
       const res = mockStore.stockReservations.find(x => x.id === args.where.id);
@@ -595,9 +591,9 @@ export const erpDb = {
     },
     create: async (args: { data: any }) => {
       if (isDatabaseConnected()) {
-        return await (prisma as any).stockReservation.create({
+        return await prisma.stockReservation.create({
           data: args.data,
-          include: { user: true, product: true, items: { include: { product: true } } }
+          include: { customer: true, employee: true, product: true, items: { include: { product: true } } }
         });
       }
       const item = { id: `res-${Date.now()}`, createdAt: new Date(), ...args.data };
@@ -614,10 +610,10 @@ export const erpDb = {
     },
     update: async (args: { where: { id: string }; data: any }) => {
       if (isDatabaseConnected()) {
-        return await (prisma as any).stockReservation.update({
+        return await prisma.stockReservation.update({
           where: { id: args.where.id },
           data: args.data,
-          include: { user: true, product: true, items: { include: { product: true } } }
+          include: { customer: true, employee: true, product: true, items: { include: { product: true } } }
         });
       }
       const idx = mockStore.stockReservations.findIndex(x => x.id === args.where.id);
@@ -754,7 +750,7 @@ export const erpDb = {
           const queryArgs: any = { ...args };
           if (!queryArgs.select && !queryArgs.include) {
             queryArgs.include = {
-              user: true,
+              customer: true,
               vendor: true,
               poItems: true,
               attachments: true,

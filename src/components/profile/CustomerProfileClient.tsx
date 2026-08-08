@@ -352,7 +352,19 @@ export default function CustomerProfileClient() {
                   <span className="text-stone-400">Branch</span>
                   <span className="font-bold text-stone-800">{emp.branch || "Hyderabad HQ"}</span>
                 </div>
+                <div className="flex justify-between pt-1 border-t border-stone-100">
+                  <span className="text-stone-400">Reporting Manager</span>
+                  <span className="font-bold text-stone-800">Vikramaditya Rao</span>
+                </div>
               </div>
+
+              <a
+                href={`mailto:${emp.email || "karan.patel@conquererp.com"}`}
+                className="mt-3 w-full py-2 bg-[#8c3120] hover:bg-[#a03828] text-white font-bold rounded-xl text-xs flex items-center justify-center space-x-2 transition-all cursor-pointer shadow-xs"
+              >
+                <Mail className="w-3.5 h-3.5" />
+                <span>Contact Operations Representative</span>
+              </a>
             </div>
           </div>
         </motion.div>

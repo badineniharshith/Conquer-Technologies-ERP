@@ -10,6 +10,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { PageSkeleton } from "../ui/motion";
 
+import VConquerHeader from "../vconquer/Header";
+
 interface AppLayoutProps {
   children: React.ReactNode;
 }
@@ -76,11 +78,24 @@ export default function AppLayout({ children }: AppLayoutProps) {
   // Client-side access control is fully handled by server-side proxy.ts middleware.
 
   const isStandalonePage = pathname === "/login" || pathname === "/register";
+  const isCustomerPortal = activeRole === "CUSTOMER" || pathname === "/allocated-stock" || pathname.startsWith("/allocated-stock/") || pathname === "/assets-warranties" || pathname === "/assign-users";
 
   if (isStandalonePage) {
     return (
       <div className="min-h-screen bg-[#fff7ed]">
         {children}
+        <Toaster richColors position="top-right" theme="light" />
+      </div>
+    );
+  }
+
+  if (isCustomerPortal) {
+    return (
+      <div className="min-h-screen bg-stone-50 text-stone-900 flex flex-col">
+        <VConquerHeader />
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 w-full">
+          {!mounted || !sessionChecked ? <PageSkeleton /> : children}
+        </main>
         <Toaster richColors position="top-right" theme="light" />
       </div>
     );

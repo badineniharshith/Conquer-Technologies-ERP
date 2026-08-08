@@ -1,10 +1,5 @@
-import DatabaseExplorer from "@/components/admin/DatabaseExplorer";
+import { redirect } from "next/navigation";
 
-export const metadata = {
-  title: "Database Explorer | Conquer ERP",
-  description: "Read-only database inspector and records lookup for administrators."
-};
-
-export default function DatabasePage() {
-  return <DatabaseExplorer />;
+export default function DatabaseExplorerPage() {
+  redirect("/dashboard");
 }

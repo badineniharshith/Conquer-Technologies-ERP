@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as zod from "zod";
 import { useErpStore } from "@/lib/store";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Lock, Mail, ShieldAlert, Sparkles, ArrowRight, Eye, EyeOff, Building2 } from "lucide-react";
+import { Lock, Mail, ShieldAlert, Sparkles, ArrowRight, Eye, EyeOff, Building2, UserCheck, ChevronDown, ChevronUp, KeyRound } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import logoImg from "../../../public/logo.png";
 
@@ -25,6 +25,8 @@ export default function LoginPage() {
   const [errorMsg, setErrorMsg] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [activeTab, setActiveTab] = useState<"employee" | "customer">("employee");
+  const [showDemoAccordion, setShowDemoAccordion] = useState(false);
 
   const {
     register,
@@ -62,19 +64,19 @@ export default function LoginPage() {
     }
   };
 
-  const handleQuickLogin = (email: string, pass: string) => {
+  const handleAutofill = (email: string, pass: string) => {
     setValue("email", email);
     setValue("password", pass);
-    onSubmit({ email, password: pass, rememberMe: false });
+    toast.info("Credentials autofilled into form. Click Login to authenticate.");
   };
 
-  const testCredentials = [
-    { label: "Super Admin", email: "superadmin@conquererp.com", pass: "Admin@123", badge: "SUPER_ADMIN" },
-    { label: "Director of Ops", email: "marcus.sterling@conquererp.com", pass: "Admin@123", badge: "DIRECTOR" },
-    { label: "Regional Manager", email: "rsm.south@conquererp.com", pass: "Admin@123", badge: "REGIONAL_MANAGER" },
-    { label: "Branch Manager", email: "bm.hyd@conquererp.com", pass: "Admin@123", badge: "BRANCH_MANAGER" },
-    { label: "Assistant Manager", email: "ananya.sharma@conquererp.com", pass: "Admin@123", badge: "ASSISTANT_MANAGER" },
-    { label: "Ops Executive", email: "karan.patel@conquererp.com", pass: "Admin@123", badge: "OPERATIONS_EXECUTIVE" },
+  const demoAccounts = [
+    { role: "Admin", email: "superadmin@conquererp.com", pass: "Admin@123", badge: "SUPER_ADMIN" },
+    { role: "Director", email: "marcus.sterling@conquererp.com", pass: "Admin@123", badge: "DIRECTOR" },
+    { role: "Operations Manager", email: "sophia.chen@conquererp.com", pass: "Admin@123", badge: "MANAGER" },
+    { role: "Assistant Manager", email: "ananya.sharma@conquererp.com", pass: "Admin@123", badge: "ASST_MGR" },
+    { role: "Operations Executive", email: "karan.patel@conquererp.com", pass: "Admin@123", badge: "EXECUTIVE" },
+    { role: "Customer", email: "asset@ibm.com", pass: "Admin@123", badge: "CUSTOMER" },
   ];
 
   const containerVariants = {
@@ -100,15 +102,15 @@ export default function LoginPage() {
           backgroundImage: `url('https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&q=80&w=1600')`
         }}
       />
-      {/* Gradient overlay — heavier on the left, lighter on right */}
+      {/* Gradient overlay */}
       <div className="absolute inset-0 bg-gradient-to-r from-stone-950/98 via-stone-950/88 to-stone-900/60 z-10" />
       {/* Subtle grid */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:32px_32px] z-10" />
 
-      {/* Main Container — stretched desktop layout, clean mobile vertical stack */}
+      {/* Main Container */}
       <div className="relative z-20 w-full lg:h-full flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-8 px-5 sm:px-10 lg:px-16 py-6 lg:py-0">
 
-        {/* ── Left Column ─────────────────────────────────────── */}
+        {/* Left Column */}
         <div className="flex-1 w-full min-w-0 flex flex-col justify-center text-left space-y-7 max-w-2xl py-4 lg:py-0 lg:pr-6">
           <div className="border-l-[4px] border-l-[#e06246]/80 pl-6 sm:pl-8 space-y-6 sm:space-y-7">
             {/* Logo + Brand */}
@@ -145,13 +147,12 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Footer */}
           <div className="text-xs sm:text-sm text-stone-500 font-semibold tracking-wider uppercase pl-6 sm:pl-8 pt-2">
             © {new Date().getFullYear()} Conquer Technologies. All rights reserved.
           </div>
         </div>
 
-        {/* ── Right Column: Login Card ─────────────────────── */}
+        {/* Right Column: Login Card */}
         <div className="w-full lg:w-[430px] xl:w-[450px] flex-shrink-0 max-w-lg lg:max-w-none">
           <motion.div
             initial={{ opacity: 0, y: 24 }}
@@ -160,7 +161,7 @@ export default function LoginPage() {
             className="w-full bg-white/[0.98] border border-stone-200/80 p-5 sm:p-8 rounded-2xl shadow-2xl relative overflow-hidden"
             style={{ boxShadow: '0 24px 64px -12px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.08)' }}
           >
-            {/* Subtle top accent line */}
+            {/* Top Accent */}
             <div className="absolute top-0 left-0 right-0 h-[3px] rounded-t-2xl" style={{ background: 'linear-gradient(90deg, #8c3120, #e06246, #8c3120)' }} />
 
             <motion.div
@@ -169,16 +170,55 @@ export default function LoginPage() {
               animate="visible"
               className="space-y-5"
             >
+              {/* Login Type Tabs: Employee vs Customer */}
+              <motion.div variants={itemVariants} className="flex items-center p-1 bg-stone-100/90 rounded-xl border border-stone-200/60">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab("employee");
+                    toast.info("Switched to Employee Login Portal");
+                  }}
+                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${
+                    activeTab === "employee"
+                      ? "bg-white text-stone-900 shadow-sm border border-stone-200"
+                      : "text-stone-500 hover:text-stone-700"
+                  }`}
+                >
+                  <Building2 className="w-3.5 h-3.5" style={{ color: activeTab === "employee" ? "#8c3120" : undefined }} />
+                  <span>Employee Login</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab("customer");
+                    toast.info("Switched to Enterprise Customer Portal");
+                  }}
+                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${
+                    activeTab === "customer"
+                      ? "bg-white text-stone-900 shadow-sm border border-stone-200"
+                      : "text-stone-500 hover:text-stone-700"
+                  }`}
+                >
+                  <UserCheck className="w-3.5 h-3.5" style={{ color: activeTab === "customer" ? "#8c3120" : undefined }} />
+                  <span>Customer Login</span>
+                </button>
+              </motion.div>
+
               {/* Header */}
               <motion.div variants={itemVariants} className="text-left pt-1">
-                <div className="flex items-center space-x-2.5 mb-3">
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shadow-inner" style={{ background: 'rgba(140,49,32,0.1)' }}>
-                    <Building2 className="w-4 h-4" style={{ color: '#8c3120' }} />
-                  </div>
-                  <span className="text-xs font-bold uppercase tracking-widest text-stone-400">Secure Portal Access</span>
+                <div className="flex items-center space-x-2.5 mb-2">
+                  <span className="text-[11px] font-bold uppercase tracking-widest text-stone-400">
+                    {activeTab === "employee" ? "Internal Staff Portal" : "Enterprise Client Portal"}
+                  </span>
                 </div>
-                <h2 className="text-xl sm:text-2xl font-black tracking-tight text-stone-900 font-outfit leading-tight">System Sign In</h2>
-                <p className="text-xs sm:text-sm text-stone-400 mt-1.5 font-medium">Enter your operational credentials to authenticate.</p>
+                <h2 className="text-xl sm:text-2xl font-black tracking-tight text-stone-900 font-outfit leading-tight">
+                  {activeTab === "employee" ? "System Sign In" : "Customer Portal Sign In"}
+                </h2>
+                <p className="text-xs text-stone-400 mt-1 font-medium">
+                  {activeTab === "employee"
+                    ? "Enter your operational credentials to authenticate."
+                    : "Enter your customer portal account credentials."}
+                </p>
               </motion.div>
 
               <AnimatePresence>
@@ -196,7 +236,7 @@ export default function LoginPage() {
                 )}
               </AnimatePresence>
 
-              {/* Form */}
+              {/* Single Login Form */}
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                 <motion.div variants={itemVariants}>
                   <label className="block text-xs font-bold text-stone-500 uppercase tracking-wider mb-1.5">User Email Address</label>
@@ -206,7 +246,7 @@ export default function LoginPage() {
                     </div>
                     <input
                       type="email"
-                      placeholder="e.g. admin@conquererp.com"
+                      placeholder={activeTab === "employee" ? "e.g. admin@conquererp.com" : "e.g. asset@ibm.com"}
                       {...register("email")}
                       className="w-full pr-3.5 py-3 bg-transparent text-sm outline-none text-stone-800 placeholder-stone-400 transition-all font-medium"
                     />
@@ -250,7 +290,7 @@ export default function LoginPage() {
                   <a
                     href="#"
                     onClick={(e) => { e.preventDefault(); toast.info("Please contact system Administrator to reset passwords."); }}
-                    className="font-bold hover:underline transition-colors text-xs sm:text-sm"
+                    className="font-bold hover:underline transition-colors text-xs"
                     style={{ color: '#8c3120' }}
                   >
                     Forgot password?
@@ -269,13 +309,14 @@ export default function LoginPage() {
                       boxShadow: '0 4px 20px -4px rgba(140,49,32,0.5), 0 1px 3px rgba(0,0,0,0.15)'
                     }}
                   >
-                    {/* Subtle shimmer overlay */}
                     <span className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/8 to-white/0 translate-x-[-100%] hover:translate-x-[100%] transition-transform duration-700" />
                     {loading ? (
                       <span className="relative z-10">Authenticating...</span>
                     ) : (
                       <>
-                        <span className="relative z-10">Login to Inventory Portal</span>
+                        <span className="relative z-10">
+                          {activeTab === "employee" ? "Login to Inventory Portal" : "Login to Customer Portal"}
+                        </span>
                         <ArrowRight className="w-4 h-4 relative z-10" />
                       </>
                     )}
@@ -283,29 +324,54 @@ export default function LoginPage() {
                 </motion.div>
               </form>
 
-              {/* Quick Login */}
-              <motion.div variants={itemVariants} className="pt-4 border-t border-stone-200/80 space-y-3">
-                <span className="block text-xs font-bold text-stone-400 uppercase tracking-wider text-center">
-                  Quick-Login Credentials (Testing)
-                </span>
-                <div className="grid grid-cols-2 gap-2 max-h-[140px] overflow-y-auto pr-1">
-                  {testCredentials.map((cred, idx) => (
-                    <motion.button
-                      key={cred.email}
-                      type="button"
-                      onClick={() => handleQuickLogin(cred.email, cred.pass)}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.5 + idx * 0.06, duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-                      whileHover={{ scale: 1.02, y: -0.5 }}
-                      whileTap={{ scale: 0.98 }}
-                      className="p-2.5 bg-stone-50 border border-stone-200/60 rounded-xl text-xs font-semibold text-stone-700 transition-all text-left flex flex-col cursor-pointer hover:border-[#8c3120]/30 hover:bg-[#fdf4f2] w-full"
+              {/* Compact Demo Credentials Accordion */}
+              <motion.div variants={itemVariants} className="pt-3 border-t border-stone-200/80">
+                <button
+                  type="button"
+                  onClick={() => setShowDemoAccordion(!showDemoAccordion)}
+                  className="w-full flex items-center justify-between p-2 rounded-xl bg-stone-50 hover:bg-stone-100 border border-stone-200/70 text-xs font-bold text-stone-600 transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center space-x-2">
+                    <KeyRound className="w-3.5 h-3.5 text-[#8c3120]" />
+                    <span>Demo Credentials (Seeded Accounts)</span>
+                  </div>
+                  {showDemoAccordion ? <ChevronUp className="w-4 h-4 text-stone-400" /> : <ChevronDown className="w-4 h-4 text-stone-400" />}
+                </button>
+
+                <AnimatePresence>
+                  {showDemoAccordion && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="overflow-hidden mt-2 space-y-1.5"
                     >
-                      <span className="font-extrabold truncate text-stone-900 text-[11px]">{cred.email}</span>
-                      <span className="text-[9px] text-stone-400 font-bold tracking-wider uppercase mt-0.5">{cred.badge.replace('_', ' ')}</span>
-                    </motion.button>
-                  ))}
-                </div>
+                      {demoAccounts.map((acc) => (
+                        <div
+                          key={acc.email}
+                          className="flex items-center justify-between p-2 rounded-lg bg-stone-50/80 border border-stone-200/50 text-[11px]"
+                        >
+                          <div className="min-w-0 pr-2">
+                            <div className="font-bold text-stone-850 truncate flex items-center space-x-1.5">
+                              <span>{acc.role}</span>
+                              <span className="text-[9px] px-1.5 py-0.2 rounded font-mono font-semibold bg-stone-200/60 text-stone-600">
+                                {acc.pass}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-stone-400 truncate">{acc.email}</div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleAutofill(acc.email, acc.pass)}
+                            className="px-2.5 py-1 bg-white hover:bg-[#fdf4f2] text-[#8c3120] border border-[#8c3120]/30 rounded-md font-bold text-[10px] transition-all cursor-pointer shrink-0 shadow-2xs"
+                          >
+                            Use Credentials
+                          </button>
+                        </div>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </motion.div>
             </motion.div>
           </motion.div>

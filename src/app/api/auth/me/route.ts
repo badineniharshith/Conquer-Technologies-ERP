@@ -62,7 +62,9 @@ export async function GET(req: NextRequest) {
         name: dbUser.name,
         companyName: dbUser.companyName || dbUser.name,
         email: dbUser.email,
-        role: dbUser.roleId === "RSM" ? "REGIONAL_SALES_MANAGER" : dbUser.roleId,
+        // IMPORTANT: Use role.name not roleId — ERP roles use UUID-based roleIds in the DB.
+        // role.name is the human-readable string (e.g., "DIRECTOR_OPERATIONS").
+        role: (dbUser as any).role?.name || (dbUser.roleId === "RSM" ? "REGIONAL_SALES_MANAGER" : dbUser.roleId),
         branch: dbUser.branch || "Head Office",
         status: dbUser.status,
         assignedEmployee

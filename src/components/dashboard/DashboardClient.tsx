@@ -1352,12 +1352,13 @@ export default function DashboardClient({
 
   // ==================== 1. SUPER ADMIN VIEW ====================
   const renderSuperAdmin = () => {
-    const totalGlobalStock = inventory.reduce((sum: number, item: any) => sum + item.quantity, 0);
+    const totalGlobalStock = inventory.reduce((sum: number, item: any) => sum + (Number(item.quantity || item.availableQty || item.availableStock) || 0), 0);
     const totalGlobalValue = inventory.reduce((sum: number, item: any) => {
       const priceRecord = priceMap.get(`${item.sku}_${item.branchCode}`);
       const catalog = productMap.get(item.sku);
-      const price = priceRecord ? priceRecord.sellingPrice : (catalog ? catalog.price : 50000);
-      return sum + (item.quantity * price);
+      const price = priceRecord ? Number(priceRecord.sellingPrice) : (catalog ? Number(catalog.sellingPrice || catalog.price || 0) : 50000);
+      const qty = Number(item.quantity || item.availableQty || item.availableStock) || 0;
+      return sum + (qty * price);
     }, 0);
 
     const branchSummaryList = ALL_BRANCHES.map(b => {
@@ -1365,13 +1366,16 @@ export default function DashboardClient({
       const bVal = bInv.reduce((sum: number, item: any) => {
         const pP = priceMap.get(`${item.sku}_${b.code}`);
         const cat = productMap.get(item.sku);
-        return sum + (item.quantity * (pP ? pP.sellingPrice : (cat ? cat.price : 50000)));
+        const price = pP ? Number(pP.sellingPrice) : (cat ? Number(cat.sellingPrice || cat.price || 0) : 50000);
+        const qty = Number(item.quantity || item.availableQty || item.availableStock) || 0;
+        return sum + (qty * price);
       }, 0);
       const bLow = bInv.filter((item: any) => {
         const p = productMap.get(item.sku);
-        return item.quantity < (p ? p.reorderLevel : 8);
+        const qty = Number(item.quantity || item.availableQty || item.availableStock) || 0;
+        return qty < (p ? (p.reorderLevel || 8) : 8);
       }).length;
-      return { ...b, totalStock: bInv.reduce((s: number, i: any) => s + i.quantity, 0), value: bVal, lowStockCount: bLow };
+      return { ...b, totalStock: bInv.reduce((s: number, i: any) => s + (Number(i.quantity || i.availableQty || i.availableStock) || 0), 0), value: bVal, lowStockCount: bLow };
     });
 
     return (
@@ -1629,6 +1633,8 @@ export default function DashboardClient({
 
   // ==================== 2. ADMIN VIEW ====================
   const renderAdmin = () => {
+    const totalAvailStock = filteredInventory.reduce((s, i) => s + (i.quantity || i.availableQty || i.availableStock || 0), 0);
+
     return (
       <div className="space-y-6">
         {renderWelcomeHeader("System Logistics & Inventory Dashboard - monitor product availability, transfer workflows, pricing, and active alerts.")}
@@ -1643,19 +1649,19 @@ export default function DashboardClient({
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-white border border-[#FED7AA] p-5 rounded-2xl shadow-sm">
             <span className="text-[10px] text-stone-400 font-bold uppercase tracking-wider block">Inventory Value</span>
-            <div className="text-xl font-black text-stone-900 mt-1">₹{stockValuation.toLocaleString()}</div>
+            <div className="text-xl font-black text-stone-900 mt-1">{inventoryValueMetrics.valStr}</div>
           </div>
           <div className="bg-white border border-[#FED7AA] p-5 rounded-2xl shadow-sm">
             <span className="text-[10px] text-stone-400 font-bold uppercase tracking-wider block">Available Stock</span>
-            <div className="text-xl font-black text-stone-900 mt-1">{availableStock.toLocaleString()}</div>
+            <div className="text-xl font-black text-stone-900 mt-1">{totalAvailStock.toLocaleString()}</div>
           </div>
           <div className="bg-white border border-[#FED7AA] p-5 rounded-2xl shadow-sm">
             <span className="text-[10px] text-stone-400 font-bold uppercase tracking-wider block">Low Stock SKUs</span>
-            <div className="text-xl font-black text-red-500 mt-1">{lowStockCount}</div>
+            <div className="text-xl font-black text-red-500 mt-1">{healthMetrics.lowStockCount}</div>
           </div>
           <div className="bg-white border border-[#FED7AA] p-5 rounded-2xl shadow-sm">
             <span className="text-[10px] text-stone-400 font-bold uppercase tracking-wider block">Dead Stock SKUs</span>
-            <div className="text-xl font-black text-stone-900 mt-1">{deadStockCount}</div>
+            <div className="text-xl font-black text-stone-900 mt-1">{healthMetrics.deadStockCount}</div>
           </div>
         </div>
 
@@ -2316,8 +2322,14 @@ export default function DashboardClient({
   // Render based on role
   switch (activeRole as string) {
     case "SUPER_ADMIN":
+    case "DIRECTOR_OPERATIONS":
+    case "MANAGING_DIRECTOR":
+    case "MD":
       return renderSuperAdmin();
     case "ADMIN":
+    case "OPERATIONS_MANAGER":
+    case "ASSISTANT_MANAGER":
+    case "OPERATIONS_EXECUTIVE":
       return renderAdmin();
     case "CUSTOMER":
       return <CustomerPortal products={products} inventory={inventory} prices={prices} />;

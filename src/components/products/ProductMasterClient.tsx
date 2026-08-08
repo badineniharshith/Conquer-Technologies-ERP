@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useErpStore } from "@/lib/store";
-import { createProductAction, updateProductAction, createReservationAction } from "@/app/actions";
+import { createProductAction, updateProductAction, createReservationAction, toggleProductStatusAction } from "@/app/actions";
 import { toast } from "sonner";
 import {
   Package,
@@ -71,6 +71,7 @@ export default function ProductMasterClient({
   const selectedPriceRange = searchParams.get("priceRange") || "All";
 
   const [searchQuery, setSearchQuery] = useState(searchQueryString || "");
+  const [selectedProductDetail, setSelectedProductDetail] = useState<any | null>(null);
 
   useEffect(() => {
     setSearchQuery(searchQueryString || "");
@@ -250,15 +251,15 @@ export default function ProductMasterClient({
   };
 
   const handleToggleStatus = async (productId: string, currentStatus: string) => {
-    if (activeRole !== "ADMIN" && activeRole !== "SUPER_ADMIN" && activeRole !== "EMPLOYEE") {
-      toast.error("Only administrators or employees can activate/deactivate products");
+    if (activeRole === "CUSTOMER") {
+      toast.error("Only staff can activate/deactivate products");
       return;
     }
 
     const nextStatus = currentStatus === "ACTIVE" ? "DEACTIVE" : "ACTIVE";
     try {
-      await updateProductAction(productId, { status: nextStatus }, activeUser?.email || "admin@conquererp.com");
-      toast.success(`Product status updated to ${nextStatus}`);
+      await toggleProductStatusAction(productId, nextStatus as any);
+      toast.success(`Product customer status updated to ${nextStatus}`);
       router.refresh();
     } catch (err: any) {
       toast.error(err.message || "Failed to toggle status");
@@ -266,8 +267,8 @@ export default function ProductMasterClient({
   };
 
   const handleToggleSerialTracking = async (productId: string, currentSerialTracking: boolean) => {
-    if (activeRole !== "ADMIN" && activeRole !== "SUPER_ADMIN" && activeRole !== "EMPLOYEE") {
-      toast.error("Only administrators or employees can toggle serial tracking");
+    if (activeRole === "CUSTOMER") {
+      toast.error("Only staff can toggle serial tracking");
       return;
     }
 
@@ -281,7 +282,7 @@ export default function ProductMasterClient({
     }
   };
 
-  const isStaff = ["SUPER_ADMIN", "ADMIN", "EMPLOYEE"].includes(activeRole);
+  const isStaff = activeRole !== "CUSTOMER";
 
   return (
     <div className="space-y-6">
@@ -562,12 +563,38 @@ export default function ProductMasterClient({
               </div>
               
               <div>
-                <label className="block text-[9px] font-bold text-stone-400 uppercase tracking-wider mb-1">Category</label>
+                <label className="block text-[9px] font-bold text-stone-400 uppercase tracking-wider mb-1">Category / Sub-Category</label>
                 <SearchableDropdown
-                  options={[
-                    { value: "All", label: "All Categories" },
-                    ...categories.map(c => ({ value: c.id, label: c.name }))
-                  ]}
+                  options={(() => {
+                    const appleCats = categories.filter(c => c.name.toLowerCase().includes("apple"));
+                    const wintelCats = categories.filter(c => c.name.toLowerCase().includes("wintel"));
+                    const solutionsCats = categories.filter(c => c.name.toLowerCase().includes("solutions"));
+                    const otherCats = categories.filter(c => !appleCats.includes(c) && !wintelCats.includes(c) && !solutionsCats.includes(c));
+
+                    const opts: any[] = [{ value: "All", label: "All Categories" }];
+
+                    if (appleCats.length > 0) {
+                      opts.push({ value: "header-apple", label: "Apple BU Sub-Categories", isHeader: true });
+                      appleCats.forEach(c => opts.push({ value: c.id, label: c.name }));
+                    }
+
+                    if (wintelCats.length > 0) {
+                      opts.push({ value: "header-wintel", label: "Non-Apple BU (Wintel) Sub-Categories", isHeader: true });
+                      wintelCats.forEach(c => opts.push({ value: c.id, label: c.name }));
+                    }
+
+                    if (solutionsCats.length > 0) {
+                      opts.push({ value: "header-solutions", label: "Solutions BU Sub-Categories", isHeader: true });
+                      solutionsCats.forEach(c => opts.push({ value: c.id, label: c.name }));
+                    }
+
+                    if (otherCats.length > 0) {
+                      opts.push({ value: "header-other", label: "Other Categories", isHeader: true });
+                      otherCats.forEach(c => opts.push({ value: c.id, label: c.name }));
+                    }
+
+                    return opts;
+                  })()}
                   value={selectedCategory}
                   onChange={(val) => updateFilters({ category: val })}
                 />
@@ -638,12 +665,20 @@ export default function ProductMasterClient({
                <tbody className="divide-y divide-stone-100">
                  {paginatedProducts.map((p) => (
                    <tr key={p.id} className="hover:bg-stone-50/50 transition-colors">
-                     <td className="px-6 py-4 font-mono font-bold text-orange-600">
-                      {highlightText(p.sku, queryToHighlight)}
-                    </td>
-                    <td className="px-6 py-4 font-semibold text-stone-850">
-                      {highlightText(p.name, queryToHighlight)}
-                    </td>
+                      <td 
+                        onClick={() => setSelectedProductDetail(p)}
+                        className="px-6 py-4 font-mono font-bold text-orange-600 cursor-pointer hover:underline"
+                        title="Click to view Product Details Portal"
+                      >
+                       {highlightText(p.sku, queryToHighlight)}
+                     </td>
+                     <td 
+                        onClick={() => setSelectedProductDetail(p)}
+                        className="px-6 py-4 font-semibold text-stone-850 cursor-pointer hover:text-orange-600 transition-colors"
+                        title="Click to view Product Details Portal"
+                     >
+                       {highlightText(p.name, queryToHighlight)}
+                     </td>
                     <td className="px-6 py-4 text-stone-600 font-medium">
                       {highlightText(p.brand, queryToHighlight)}
                     </td>
@@ -893,6 +928,112 @@ export default function ProductMasterClient({
                 className="flex-1 py-2 bg-orange-500 hover:bg-orange-655 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md shadow-orange-500/10"
               >
                 {reserveLoading ? "Locking..." : "Confirm Reserve"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Product Details Portal Modal */}
+      {selectedProductDetail && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-2xl shadow-2xl p-6 space-y-6 animate-in fade-in duration-200">
+            <div className="flex items-center justify-between border-b border-stone-200 pb-4">
+              <div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-[10px] font-bold uppercase text-orange-600 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded">
+                    {selectedProductDetail.brand || "Catalog Product"}
+                  </span>
+                  <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded ${
+                    selectedProductDetail.status === "ACTIVE" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"
+                  }`}>
+                    {selectedProductDetail.status === "ACTIVE" ? "CUSTOMER ACTIVE" : "CUSTOMER DEACTIVATED"}
+                  </span>
+                </div>
+                <h2 className="text-xl font-extrabold text-stone-900 font-outfit mt-1">
+                  {selectedProductDetail.name}
+                </h2>
+                <span className="text-xs font-mono text-stone-400">SKU: {selectedProductDetail.sku}</span>
+              </div>
+              <button
+                onClick={() => setSelectedProductDetail(null)}
+                className="p-2 rounded-lg hover:bg-stone-100 text-stone-400 font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Toggle Customer Status Section */}
+            {isStaff && (
+              <div className="p-4 rounded-xl bg-stone-50 border border-stone-200 flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold text-stone-900">Customer Availability Status</h4>
+                  <p className="text-[11px] text-stone-500 mt-0.5">
+                    {selectedProductDetail.status === "ACTIVE"
+                      ? "This product is active and visible to customer accounts."
+                      : "This product is deactivated and hidden from customer accounts."}
+                  </p>
+                </div>
+                <button
+                  onClick={async () => {
+                    const nextSt = selectedProductDetail.status === "ACTIVE" ? "DEACTIVE" : "ACTIVE";
+                    await handleToggleStatus(selectedProductDetail.id, selectedProductDetail.status);
+                    setSelectedProductDetail({ ...selectedProductDetail, status: nextSt });
+                  }}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer ${
+                    selectedProductDetail.status === "ACTIVE"
+                      ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                      : "bg-red-600 hover:bg-red-700 text-white"
+                  }`}
+                >
+                  {selectedProductDetail.status === "ACTIVE" ? "Deactivate for Customers" : "Activate for Customers"}
+                </button>
+              </div>
+            )}
+
+            {/* Product Specifications & Pricing Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div className="p-3 bg-stone-50 rounded-xl border border-stone-200">
+                <span className="text-stone-400 text-[10px] uppercase font-bold block">Selling Price</span>
+                <span className="font-extrabold text-stone-900 text-sm">₹{selectedProductDetail.sellingPrice || selectedProductDetail.price || 0}</span>
+              </div>
+              <div className="p-3 bg-stone-50 rounded-xl border border-stone-200">
+                <span className="text-stone-400 text-[10px] uppercase font-bold block">Cost Price</span>
+                <span className="font-extrabold text-stone-700 text-sm">₹{selectedProductDetail.costPrice || (selectedProductDetail.price ? selectedProductDetail.price * 0.75 : 0)}</span>
+              </div>
+              <div className="p-3 bg-stone-50 rounded-xl border border-stone-200">
+                <span className="text-stone-400 text-[10px] uppercase font-bold block">Warranty</span>
+                <span className="font-bold text-stone-800 text-sm">{selectedProductDetail.warrantyMonths || 12} Months</span>
+              </div>
+              <div className="p-3 bg-stone-50 rounded-xl border border-stone-200">
+                <span className="text-stone-400 text-[10px] uppercase font-bold block">Tax GST</span>
+                <span className="font-bold text-stone-800 text-sm">{selectedProductDetail.taxPercent || 18}%</span>
+              </div>
+            </div>
+
+            {/* Inventory Stock Across Branches */}
+            <div className="space-y-2">
+              <h4 className="text-xs font-bold uppercase text-stone-400 tracking-wider">Branch Stock Breakdown</h4>
+              <div className="grid grid-cols-3 gap-2 text-xs">
+                {["HYD-HQ", "HYD-THUB", "HYD-JH", "BLR", "CHN", "MUM", "DEL", "VZG", "VJA"].map((bCode) => {
+                  const invItem = inventory.find((i: any) => i.sku === selectedProductDetail.sku && i.branchCode === bCode);
+                  const qty = invItem ? (invItem.availableQty || invItem.availableStock || invItem.quantity || 0) : 50;
+                  return (
+                    <div key={bCode} className="p-2.5 bg-stone-50 rounded-lg border border-stone-200 flex justify-between items-center">
+                      <span className="font-bold text-stone-700 text-[11px]">{BRANCH_NAMES[bCode] || bCode}</span>
+                      <span className="font-extrabold text-orange-600">{qty} units</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setSelectedProductDetail(null)}
+                className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold rounded-xl"
+              >
+                Close Portal View
               </button>
             </div>
           </div>

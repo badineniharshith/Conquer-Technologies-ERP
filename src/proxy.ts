@@ -4,104 +4,41 @@ import { verifyJwt } from "@/lib/jwt";
 import { erpDb } from "@/lib/db";
 
 // ============================================================
-// Next.js 16 Proxy — Server-Side Auth & Role-Based Route Guard
-// ============================================================
-// This replaces client-side useEffect guards. Users never see
-// pages they cannot access. No "Access Denied" screens.
+// Next.js Proxy — Server-Side Auth & Role-Based Route Guard
 // ============================================================
 
-// Three access levels. Every other role key maps to one of these.
-const LEVEL_1_ROLES = ["SUPER_ADMIN", "ADMIN", "DIRECTOR_OPERATIONS", "DIRECTOR"];
-const LEVEL_2_ROLES = [
+// The ONLY 5 Roles allowed to access ERP Stock, Inventory & Procurement pages.
+// These must match the `name` field in the `roles` table exactly.
+const ERP_ALLOWED_ROLES = [
+  "SUPER_ADMIN",
+  "ADMIN",
+  "DIRECTOR_OPERATIONS",
   "OPERATIONS_MANAGER",
   "ASSISTANT_MANAGER",
-  "OPERATIONS_EXECUTIVE",
-  "MANAGER",
-  "ASST_MGR",
-  "EXECUTIVE",
-  "EMPLOYEE",
-  "SALES_HEAD",
-  "REGIONAL_SALES_MANAGER",
-  "BRANCH_MANAGER",
-  "SALES_MANAGER",
-  "SALES_EXECUTIVE",
-  "REGIONAL_OFFICER",
-  "BRANCH_USER",
-  "VIEWER",
-  "REGIONAL_MANAGER",
-  "INVENTORY_MANAGER",
-  "PURCHASE_MANAGER",
-  "LOGISTICS_MANAGER",
-  "ACCOUNTS_MANAGER"
+  "OPERATIONS_EXECUTIVE"
 ];
-const LEVEL_3_ROLES = ["CUSTOMER"];
 
-function getLevel(role: string): 1 | 2 | 3 {
-  if (LEVEL_1_ROLES.includes(role)) return 1;
-  if (LEVEL_2_ROLES.includes(role)) return 2;
-  return 3; // CUSTOMER and any unknown role
-}
+// ERP routes restricted strictly to the 5 ERP Roles
+const ERP_ROUTES = [
+  "/products",
+  "/categories",
+  "/pricing",
+  "/price-history",
+  "/stock-movement",
+  "/analytics",
+  "/reserved-stock",
+  "/purchase-orders",
+  "/settings"
+];
 
-// Routes each level can access (prefix match)
-const LEVEL_ROUTES: Record<1 | 2 | 3, string[]> = {
-  1: [
-    "/dashboard",
-    "/products",
-    "/categories",
-    "/pricing",
-    "/price-history",
-    "/stock-movement",
-    "/analytics",
-    "/admin",
-    "/settings",
-    "/reserved-stock",
-    "/purchase-orders",
-    "/opportunities",
-    "/employees",
-    "/recommendations",
-    "/profile",
-  ],
-  2: [
-    "/dashboard",
-    "/products",
-    "/categories",
-    "/pricing",
-    "/price-history",
-    "/stock-movement",
-    "/analytics",
-    "/admin",
-    "/settings",
-    "/reserved-stock",
-    "/purchase-orders",
-    "/opportunities",
-    "/employees",
-    "/recommendations",
-    "/profile",
-  ],
-  3: [
-    "/dashboard",
-    "/products",
-    "/price-history",
-    "/recommendations",
-    "/reserved-stock",
-    "/purchase-orders",
-    "/opportunities",
-    "/profile",
-    "/settings",
-  ],
-};
-
-// Pages that any visitor (even unauthenticated) can access
+// Public & system routes
 const PUBLIC_PAGES = ["/login", "/register"];
-
-// Pages that any authenticated user can access (system pages)
 const ALWAYS_ALLOWED = ["/logout", "/403"];
 
 export async function proxy(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
 
-
-  // 1. Skip static assets and API routes — they handle their own auth
+  // 1. Skip static assets and API routes
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/static") ||
@@ -113,33 +50,31 @@ export async function proxy(req: NextRequest) {
 
   const token = req.cookies.get("erp-session-token")?.value;
 
-  // 2. Public pages — allow if not logged in, redirect to dashboard if logged in
+  // 2. Public pages
   if (PUBLIC_PAGES.includes(pathname)) {
     if (token) {
       const payload = await verifyJwt(token);
       if (payload) {
-        // Already authenticated — send to dashboard instead of login page
         return NextResponse.redirect(new URL("/dashboard", req.url));
       }
     }
     return NextResponse.next();
   }
 
-  // 3. Not authenticated → redirect to login (never show a "403" page)
+  // 3. Unauthenticated → redirect to login
   if (!token) {
     return NextResponse.redirect(new URL("/login", req.url));
   }
 
-  // 4. Verify the JWT
+  // 4. Verify JWT
   const payload = await verifyJwt(token);
   if (!payload || !payload.id) {
-    // Corrupted/expired session
     const response = NextResponse.redirect(new URL("/login", req.url));
     response.cookies.delete("erp-session-token");
     return response;
   }
 
-  // Fetch user from DB to evaluate granular permissions
+  // Fetch user from DB
   const user = await erpDb.users.findUnique({ where: { id: payload.id as string } });
   if (!user) {
     const response = NextResponse.redirect(new URL("/login", req.url));
@@ -157,43 +92,19 @@ export async function proxy(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // 7. Dynamic route guard based on role-defaults or custom granular page permissions
-  const roleId = user.roleId || payload.role as string;
-  const level = getLevel(roleId);
-  let allowedRoutes = [...LEVEL_ROUTES[level]];
+  // Resolve the role name from DB include (user.role?.name) or fall back to JWT payload.role.
+  // IMPORTANT: ERP roles use UUID roleIds in the DB, so we must use role.name not roleId.
+  const roleName = (user as any).role?.name || (payload.role as string) || user.roleId;
 
-  if (user.inheritBranchPermissions) {
-    if (user.branchId) {
-      const branches = await erpDb.branches.findMany();
-      const userBranch = branches.find((b: any) => b.id === user.branchId);
-      if (userBranch?.pagePermissions) {
-        try {
-          allowedRoutes = JSON.parse(userBranch.pagePermissions);
-        } catch (e) {
-          console.error("Failed to parse branch pagePermissions:", e);
-        }
-      }
-    }
-  } else if (user.pagePermissions) {
-    try {
-      allowedRoutes = JSON.parse(user.pagePermissions);
-    } catch (e) {
-      console.error("Failed to parse user pagePermissions:", e);
-    }
-  }
+  // Check if requested route is an ERP route
+  const isErpRoute = ERP_ROUTES.some(r => pathname === r || pathname.startsWith(r + "/"));
 
-  // Always make sure /dashboard and ALWAYS_ALLOWED is reachable for any authenticated user
-  const isAllowed = allowedRoutes.some((prefix) => {
-    if (prefix === "/dashboard") {
-      return pathname === "/dashboard";
+  if (isErpRoute) {
+    const isErpRole = ERP_ALLOWED_ROLES.includes(roleName);
+    if (!isErpRole) {
+      // Redirect non-ERP roles and customers to CRM dashboard
+      return NextResponse.redirect(new URL("/admin/customers", req.url));
     }
-    return pathname === prefix || pathname.startsWith(prefix + "/");
-  });
-
-  if (!isAllowed) {
-    // Redirect to dashboard, NOT to a 403 page.
-    // The user should never see a page they can't access.
-    return NextResponse.redirect(new URL("/dashboard", req.url));
   }
 
   return NextResponse.next();
@@ -201,17 +112,9 @@ export async function proxy(req: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except:
-     * - api (API routes)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     */
     "/((?!api|_next/static|_next/image|favicon.ico).*)",
   ],
 };
 
 export { proxy as middleware };
 export default proxy;
-

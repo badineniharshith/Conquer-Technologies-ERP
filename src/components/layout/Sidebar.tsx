@@ -28,7 +28,8 @@ import {
   LogOut,
   ClipboardList,
   Target,
-  Briefcase
+  Briefcase,
+  ShieldCheck
 } from "lucide-react";
 
 interface MenuItem {
@@ -38,82 +39,113 @@ interface MenuItem {
 }
 
 export const getMenuItems = (role: UserRole): MenuItem[] => {
-  const items: Partial<Record<UserRole, MenuItem[]>> = {
-    SUPER_ADMIN: [
-      { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-      { title: "Customer Module", href: "/admin/customers", icon: Users },
-      { title: "Products Catalog", href: "/products", icon: PlusCircle },
-      { title: "Categories", href: "/categories", icon: FolderOpen },
-      { title: "Price History", href: "/price-history", icon: TrendingUp },
-      { title: "Stock Movement", href: "/stock-movement", icon: ArrowUpDown },
-      { title: "Analytics", href: "/analytics", icon: BarChart3 },
-      { title: "Stock Reservations", href: "/reserved-stock", icon: Boxes },
-      { title: "Purchase Orders", href: "/purchase-orders", icon: ClipboardList },
-      { title: "User Management", href: "/settings/users", icon: Users },
-      { title: "Org Hierarchy", href: "/settings/hierarchy", icon: Target },
-      { title: "System Settings", href: "/settings", icon: Settings },
-      { title: "Database Explorer", href: "/admin/database", icon: Database },
-      { title: "Logout", href: "/logout", icon: LogOut },
-    ],
-    DIRECTOR_OPERATIONS: [
-      { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-      { title: "Customer Module", href: "/admin/customers", icon: Users },
-      { title: "Products Catalog", href: "/products", icon: PlusCircle },
-      { title: "Price History", href: "/price-history", icon: TrendingUp },
-      { title: "Analytics & Reports", href: "/analytics", icon: BarChart3 },
-      { title: "Stock Reservations", href: "/reserved-stock", icon: Boxes },
-      { title: "Purchase Orders", href: "/purchase-orders", icon: ClipboardList },
-      { title: "User Management", href: "/settings/users", icon: Users },
-      { title: "Org Hierarchy", href: "/settings/hierarchy", icon: Target },
-      { title: "Logout", href: "/logout", icon: LogOut },
-    ],
-    OPERATIONS_MANAGER: [
-      { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-      { title: "Customer Module", href: "/admin/customers", icon: Users },
-      { title: "Products Catalog", href: "/products", icon: PlusCircle },
-      { title: "Categories", href: "/categories", icon: FolderOpen },
-      { title: "Price History", href: "/price-history", icon: TrendingUp },
-      { title: "Stock Reservations", href: "/reserved-stock", icon: Boxes },
-      { title: "Purchase Orders", href: "/purchase-orders", icon: ClipboardList },
-      { title: "Stock Movement", href: "/stock-movement", icon: ArrowUpDown },
-      { title: "My Team", href: "/settings/users", icon: Users },
-      { title: "Org Hierarchy", href: "/settings/hierarchy", icon: Target },
-      { title: "Logout", href: "/logout", icon: LogOut },
-    ],
-    ASSISTANT_MANAGER: [
-      { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-      { title: "Customer Module", href: "/admin/customers", icon: Users },
-      { title: "Products Catalog", href: "/products", icon: PlusCircle },
-      { title: "Price History", href: "/price-history", icon: TrendingUp },
-      { title: "Operations Executives", href: "/settings/users", icon: Users },
-      { title: "Stock Reservations", href: "/reserved-stock", icon: Boxes },
-      { title: "Purchase Orders", href: "/purchase-orders", icon: ClipboardList },
-      { title: "Org Hierarchy", href: "/settings/hierarchy", icon: Target },
-      { title: "Logout", href: "/logout", icon: LogOut },
-    ],
-    OPERATIONS_EXECUTIVE: [
-      { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-      { title: "Customer Module", href: "/admin/customers", icon: Users },
-      { title: "Products Catalog", href: "/products", icon: PlusCircle },
-      { title: "Price History", href: "/price-history", icon: TrendingUp },
-      { title: "Stock Reservations", href: "/reserved-stock", icon: Boxes },
-      { title: "Purchase Orders", href: "/purchase-orders", icon: ClipboardList },
-      { title: "Org Hierarchy", href: "/settings/hierarchy", icon: Target },
-      { title: "Logout", href: "/logout", icon: LogOut },
-    ],
-    CUSTOMER: [
-      { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-      { title: "Products Catalog", href: "/products", icon: PlusCircle },
-      { title: "My Reservations", href: "/reserved-stock", icon: Boxes },
-      { title: "My Purchase Orders", href: "/purchase-orders", icon: ClipboardList },
-      { title: "Price History", href: "/price-history", icon: TrendingUp },
-      { title: "My Profile", href: "/profile", icon: Users },
-      { title: "Settings", href: "/settings", icon: Settings },
-      { title: "Logout", href: "/logout", icon: LogOut },
-    ],
+  const fullAdminMenu: MenuItem[] = [
+    { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { title: "Customers Master", href: "/customers", icon: Users },
+    { title: "Allocated Stock", href: "/allocated-stock", icon: Boxes },
+    { title: "Orders History", href: "/orders", icon: ClipboardList },
+    { title: "Assets & Warranties", href: "/assets-warranties", icon: ShieldCheck },
+    { title: "Assign Corporate Users", href: "/assign-users", icon: Users },
+    { title: "Products Catalog", href: "/products", icon: PlusCircle },
+    { title: "Categories", href: "/categories", icon: FolderOpen },
+    { title: "Price History", href: "/price-history", icon: TrendingUp },
+    { title: "Stock Movement", href: "/stock-movement", icon: ArrowUpDown },
+    { title: "Analytics", href: "/analytics", icon: BarChart3 },
+    { title: "Stock Reservations", href: "/reserved-stock", icon: Boxes },
+    { title: "Purchase Orders", href: "/purchase-orders", icon: ClipboardList },
+    { title: "User Management", href: "/settings/users", icon: Users },
+    { title: "Org Hierarchy", href: "/settings/hierarchy", icon: Target },
+    { title: "System Settings", href: "/settings", icon: Settings },
+    { title: "Logout", href: "/logout", icon: LogOut },
+  ];
+
+  const salesMenu: MenuItem[] = [
+    { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { title: "Customers Master", href: "/customers", icon: Users },
+    { title: "Allocated Stock", href: "/allocated-stock", icon: Boxes },
+    { title: "Orders History", href: "/orders", icon: ClipboardList },
+    { title: "Assets & Warranties", href: "/assets-warranties", icon: ShieldCheck },
+    { title: "Assign Corporate Users", href: "/assign-users", icon: Users },
+    { title: "Org Hierarchy", href: "/settings/hierarchy", icon: Target },
+    { title: "Logout", href: "/logout", icon: LogOut },
+  ];
+
+  const opsMenu: MenuItem[] = [
+    { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { title: "Customers Master", href: "/customers", icon: Users },
+    { title: "Allocated Stock", href: "/allocated-stock", icon: Boxes },
+    { title: "Orders History", href: "/orders", icon: ClipboardList },
+    { title: "Assets & Warranties", href: "/assets-warranties", icon: ShieldCheck },
+    { title: "Assign Corporate Users", href: "/assign-users", icon: Users },
+    { title: "Products Catalog", href: "/products", icon: PlusCircle },
+    { title: "Categories", href: "/categories", icon: FolderOpen },
+    { title: "Price History", href: "/price-history", icon: TrendingUp },
+    { title: "Stock Movement", href: "/stock-movement", icon: ArrowUpDown },
+    { title: "Analytics", href: "/analytics", icon: BarChart3 },
+    { title: "Stock Reservations", href: "/reserved-stock", icon: Boxes },
+    { title: "Purchase Orders", href: "/purchase-orders", icon: ClipboardList },
+    { title: "User Management", href: "/settings/users", icon: Users },
+    { title: "Org Hierarchy", href: "/settings/hierarchy", icon: Target },
+    { title: "System Settings", href: "/settings", icon: Settings },
+    { title: "Logout", href: "/logout", icon: LogOut },
+  ];
+
+  const customerMenu: MenuItem[] = [
+    { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { title: "Allocated Stock", href: "/allocated-stock", icon: Boxes },
+    { title: "Orders", href: "/orders", icon: ClipboardList },
+    { title: "Assets & Warranties", href: "/assets-warranties", icon: ShieldCheck },
+    { title: "Assign Users", href: "/assign-users", icon: Users },
+    { title: "Products Catalog", href: "/products", icon: PlusCircle },
+    { title: "My Reservations", href: "/reserved-stock", icon: Boxes },
+    { title: "My Purchase Orders", href: "/purchase-orders", icon: ClipboardList },
+    { title: "My Profile", href: "/profile", icon: Users },
+    { title: "Settings", href: "/settings", icon: Settings },
+    { title: "Logout", href: "/logout", icon: LogOut },
+  ];
+
+  const items: Partial<Record<string, MenuItem[]>> = {
+    // L0 Admin
+    SUPER_ADMIN: fullAdminMenu,
+    ADMIN: fullAdminMenu,
+    MANAGING_DIRECTOR: fullAdminMenu,
+    MD: fullAdminMenu,
+
+    // ERP Ops roles - all get opsMenu
+    DIRECTOR_OPERATIONS: opsMenu,
+    OPERATIONS_MANAGER: opsMenu,
+    ASSISTANT_MANAGER: opsMenu,
+    OPERATIONS_EXECUTIVE: opsMenu,
+
+    // CRM / Sales roles - all get salesMenu
+    SALES_DIRECTOR: salesMenu,
+    DIRECTOR_OF_TECHNOLOGY: salesMenu,
+    MARKETING_MANAGER: salesMenu,
+    POST_SALES_MANAGER: salesMenu,
+    BUSINESS_MANAGER: salesMenu,
+    PRESALES_MANAGER: salesMenu,
+    ASST_MARKETING_MANAGER: salesMenu,
+    TEAM_LEAD: salesMenu,
+    REGIONAL_SALES_MANAGER: salesMenu,
+    SENIOR_PRESALES_LEAD: salesMenu,
+    TELECALLER: salesMenu,
+    FRONT_END_OPERATOR: salesMenu,
+    KEY_ACCOUNT_MANAGER: salesMenu,
+    PRESALES_CONSULTANT: salesMenu,
+    INSIDE_SALES_MANAGER: salesMenu,
+
+    // External
+    CUSTOMER: customerMenu,
+
+    // Legacy
+    EMPLOYEE: salesMenu,
+    SALES_HEAD: salesMenu,
+    BRANCH_MANAGER: salesMenu,
+    SALES_MANAGER: salesMenu,
+    SALES_EXECUTIVE: salesMenu,
   };
 
-  return (items[role] || items.CUSTOMER || []) as MenuItem[];
+  return (items[role] || salesMenu) as MenuItem[];
 };
 
 interface SidebarProps {

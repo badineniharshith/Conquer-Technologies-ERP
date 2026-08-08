@@ -11,7 +11,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 export default function UserManagementPage() {
   const { activeUser } = useErpStore();
-  const isSuperAdmin = activeUser?.role === "SUPER_ADMIN";
+  const isSuperAdmin = activeUser?.role === "SUPER_ADMIN" || activeUser?.role === "ADMIN";
 
   const [users, setUsers] = useState<any[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
@@ -110,27 +110,33 @@ export default function UserManagementPage() {
   const filteredUsers = useMemo(() => {
     return users.filter((u) => {
       const q = searchQuery.toLowerCase();
+      const roleName = u.roleName || u.role?.name || u.roleId || "";
       const matchesSearch =
         u.name?.toLowerCase().includes(q) ||
         u.email?.toLowerCase().includes(q) ||
         u.employeeId?.toLowerCase().includes(q) ||
         u.customerId?.toLowerCase().includes(q) ||
-        u.roleId?.toLowerCase().includes(q);
-      const matchesRole = roleFilter === "ALL" || u.roleId === roleFilter;
+        roleName.toLowerCase().includes(q);
+      const matchesRole =
+        roleFilter === "ALL" ||
+        roleName.toUpperCase() === roleFilter.toUpperCase() ||
+        u.roleId === roleFilter;
       return matchesSearch && matchesRole;
     });
   }, [users, searchQuery, roleFilter]);
 
-  const getRoleBadge = (roleId: string) => {
+  const getRoleBadge = (user: any) => {
+    const roleName = user.roleName || user.role?.name || user.roleId || "";
     const map: Record<string, string> = {
       SUPER_ADMIN: "bg-purple-50 text-purple-700 border-purple-200",
+      ADMIN: "bg-purple-50 text-purple-700 border-purple-200",
       DIRECTOR_OPERATIONS: "bg-rose-50 text-rose-700 border-rose-200",
       OPERATIONS_MANAGER: "bg-amber-50 text-amber-700 border-amber-200",
       ASSISTANT_MANAGER: "bg-blue-50 text-blue-700 border-blue-200",
       OPERATIONS_EXECUTIVE: "bg-emerald-50 text-emerald-700 border-emerald-200",
       CUSTOMER: "bg-stone-100 text-stone-600 border-stone-200",
     };
-    return map[roleId] || "bg-stone-50 text-stone-600 border-stone-200";
+    return map[roleName] || "bg-stone-50 text-stone-600 border-stone-200";
   };
 
   const getInitials = (name: string) => {
@@ -148,17 +154,17 @@ export default function UserManagementPage() {
 
   const reportsToOptions = useMemo(() => {
     return users.filter(u => {
-      if (u.id === formData.id || u.roleId === "CUSTOMER") return false;
-      const targetParentRole = roleHierarchy[formData.roleId];
-      return u.roleId === targetParentRole;
+      if (u.id === formData.id) return false;
+      const roleName = u.roleName || u.role?.name || u.roleId || "";
+      return roleName !== "CUSTOMER";
     });
-  }, [users, formData.roleId, formData.id]);
+  }, [users, formData.id]);
 
   const stats = useMemo(() => ({
     total: users.length,
     active: users.filter(u => u.status === "ACTIVE").length,
-    employees: users.filter(u => u.roleId !== "CUSTOMER").length,
-    customers: users.filter(u => u.roleId === "CUSTOMER").length,
+    employees: users.filter(u => (u.roleName || u.role?.name || u.roleId) !== "CUSTOMER").length,
+    customers: users.filter(u => (u.roleName || u.role?.name || u.roleId) === "CUSTOMER").length,
   }), [users]);
 
   return (
@@ -222,11 +228,17 @@ export default function UserManagementPage() {
           >
             <option value="ALL">All Roles</option>
             <option value="SUPER_ADMIN">Super Admin</option>
-            <option value="DIRECTOR_OPERATIONS">Director</option>
-            <option value="OPERATIONS_MANAGER">SCM Manager</option>
-            <option value="ASSISTANT_MANAGER">Asst. Manager</option>
-            <option value="OPERATIONS_EXECUTIVE">Executive</option>
+            <option value="ADMIN">Admin</option>
+            <option value="DIRECTOR_OPERATIONS">Director of Operations</option>
+            <option value="OPERATIONS_MANAGER">Operations SCM Manager</option>
+            <option value="ASSISTANT_MANAGER">Assistant Manager</option>
+            <option value="OPERATIONS_EXECUTIVE">Operations Executive</option>
             <option value="CUSTOMER">Customer</option>
+            {roles.map(r => (
+              !["SUPER_ADMIN", "ADMIN", "DIRECTOR_OPERATIONS", "OPERATIONS_MANAGER", "ASSISTANT_MANAGER", "OPERATIONS_EXECUTIVE", "CUSTOMER"].includes(r.name) && (
+                <option key={r.id} value={r.name || r.id}>{r.name}</option>
+              )
+            ))}
           </select>
           <button onClick={fetchUsersData} className="btn-ghost px-3 py-2 text-xs flex items-center space-x-1.5 shrink-0">
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
@@ -265,7 +277,7 @@ export default function UserManagementPage() {
                   <tr key={u.id} className="table-row-hover">
                     <td className="py-3.5 px-5">
                       <div className="flex items-center space-x-3">
-                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 ${getRoleBadge(u.roleId)}`}>
+                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 ${getRoleBadge(u)}`}>
                           {getInitials(u.name || "?")}
                         </div>
                         <div>
@@ -283,8 +295,8 @@ export default function UserManagementPage() {
                       </span>
                     </td>
                     <td className="py-3.5 px-5">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-bold uppercase border ${getRoleBadge(u.roleId)}`}>
-                        {u.role?.name || u.roleId.replace(/_/g, " ")}
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-bold uppercase border ${getRoleBadge(u)}`}>
+                        {u.roleName || u.role?.name || u.roleId.replace(/_/g, " ")}
                       </span>
                     </td>
                     <td className="py-3.5 px-5 hidden md:table-cell">

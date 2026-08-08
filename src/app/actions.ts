@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { signJwt, verifyJwt } from "@/lib/jwt";
 import { cookies } from "next/headers";
 import bcrypt from "bcryptjs";
+import { generateNextPoNumber, syncErpPoToCrm, syncPoStockReservation } from "@/lib/poSync";
 
 // 1. Authentication & Registration & Audit Helpers
 function auditLog(action: string, performedBy: string, targetUser: string, details: any) {
@@ -453,6 +454,20 @@ export async function updateProductAction(
 
   revalidatePath("/products");
   return result;
+}
+
+export async function toggleProductStatusAction(productId: string, newStatus: "ACTIVE" | "INACTIVE") {
+  const performedBy = await getCurrentUserId();
+  const result = await erpDb.products.update({
+    where: { id: productId },
+    data: { status: newStatus, updatedAt: new Date() }
+  });
+
+  auditLog("PRODUCT_STATUS_TOGGLE", performedBy, productId, { status: newStatus });
+
+  revalidatePath("/products");
+  revalidatePath("/dashboard");
+  return { success: true, product: result };
 }
 
 // 5. Excel Import Simulation (Import Excel)
@@ -2140,38 +2155,28 @@ export async function verifyPurchaseOrderAction(poId: string) {
     items = [];
   }
 
-  // Check stock availability first
   const allInventory = await erpDb.inventory.findMany();
   let allAvailable = true;
   const shortageItems: string[] = [];
+  let stockWarningMsg = "";
+  const stockSummaryLines: string[] = [];
 
+  // Reserve stock for each item (reserving max available if partial)
   for (const item of items) {
     const inv = allInventory.find((i: any) => i.sku === item.sku && i.branchCode === po.branchCode);
     const availableQty = inv ? (inv.availableQty || inv.availableStock || inv.quantity || 0) : 0;
+    const reservedAmount = Math.min(availableQty, item.quantity);
+
     if (availableQty < item.quantity) {
       allAvailable = false;
-      shortageItems.push(`${item.sku} (need ${item.quantity}, have ${availableQty})`);
+      const shortageQty = item.quantity - availableQty;
+      const line = `Only ${availableQty} units available for ${item.sku}. The remaining ${shortageQty} units need to be ordered.`;
+      shortageItems.push(line);
+      stockSummaryLines.push(line);
     }
-  }
 
-  if (!allAvailable) {
-    // Keep as Pending, update stockStatus to Insufficient
-    await erpDb.purchaseOrders.update({
-      where: { id: poId },
-      data: { stockStatus: "Insufficient", verificationStatus: "Pending" }
-    });
-    revalidatePath("/purchase-orders");
-    return { 
-      error: `Insufficient stock for: ${shortageItems.join(", ")}. PO remains Pending.`,
-      stockStatus: "Insufficient"
-    };
-  }
-
-  // Stock is available — reserve inventory for each item
-  for (const item of items) {
-    const inv = allInventory.find((i: any) => i.sku === item.sku && i.branchCode === po.branchCode);
-    if (inv) {
-      const updatedReserved = (inv.reservedQty || 0) + item.quantity;
+    if (inv && reservedAmount > 0) {
+      const updatedReserved = (inv.reservedQty || 0) + reservedAmount;
       const updatedAvailable = Math.max(0, (inv.quantity || 0) - updatedReserved - (inv.allocatedQty || 0));
       await erpDb.inventory.update({
         where: { id: inv.id },
@@ -2183,18 +2188,21 @@ export async function verifyPurchaseOrderAction(poId: string) {
         }
       });
 
-      // Create inventory movement audit
       await erpDb.inventoryMovements.create({
         data: {
           sku: item.sku,
           branchCode: po.branchCode,
           type: "ADJUSTMENT",
-          quantity: item.quantity,
-          details: `Reserved ${item.quantity} units of ${item.sku} for PO ${po.poNumber} (Customer: ${po.customerName})`,
+          quantity: reservedAmount,
+          details: `Reserved ${reservedAmount} units of ${item.sku} for PO ${po.poNumber} (Customer: ${po.customerName})`,
           userId: performedBy
         }
       });
     }
+  }
+
+  if (stockSummaryLines.length > 0) {
+    stockWarningMsg = stockSummaryLines.join(" ");
   }
 
   // Update PoItem itemStatus for each relational item row
@@ -2227,6 +2235,10 @@ export async function verifyPurchaseOrderAction(poId: string) {
     }
   });
 
+  // Dual-sync PO & Stock Reservation across CRM and ERP schemas
+  await syncPoStockReservation(poId);
+  await syncErpPoToCrm(poId);
+
   // Create Opportunity record
   const opportunityNumber = `OPP-${Date.now()}`;
   const totalQuantity = items.reduce((sum, i) => sum + i.quantity, 0);
@@ -2253,31 +2265,36 @@ export async function verifyPurchaseOrderAction(poId: string) {
     console.error("Opportunity creation warning:", oppErr.message);
   }
 
+  const notifDetail = stockWarningMsg 
+    ? `Your Purchase Order ${po.poNumber} has been verified. Note: ${stockWarningMsg}`
+    : `Your Purchase Order ${po.poNumber} has been verified and stock has been reserved for you. Expiry: ${expiryDate.toLocaleDateString()}`;
+
   // Notify customer
   await createNotification(
     po.customerId,
     "Purchase Order Verified",
-    `Your Purchase Order ${po.poNumber} has been verified and stock has been reserved for you. Expiry: ${expiryDate.toLocaleDateString()}`
+    notifDetail
   );
 
   // Notify admins
   await notifyAdmins(
     "PO Verified & Stock Reserved",
-    `PO ${po.poNumber} for customer ${po.customerName} has been verified by staff. Stock reserved. Opportunity ${opportunityNumber} created.`
+    `PO ${po.poNumber} for customer ${po.customerName} has been verified. ${stockWarningMsg || "Full stock reserved."} Opportunity ${opportunityNumber} created.`
   );
 
   auditLog("PO_VERIFICATION", performedBy, po.customerId, {
     poNumber: po.poNumber,
     verificationStatus: "Verified",
     opportunityNumber,
-    itemsReserved: items
+    itemsReserved: items,
+    warning: stockWarningMsg || undefined
   });
 
   revalidatePath("/purchase-orders");
   revalidatePath("/opportunities");
   revalidatePath("/dashboard");
 
-  return { success: true, opportunityNumber };
+  return { success: true, opportunityNumber, warning: stockWarningMsg || undefined };
 }
 
 export async function lookupPurchaseOrderByNumberAction(poNumber: string) {
@@ -2332,8 +2349,13 @@ export async function updateOpportunityStatusAction(opportunityId: string, statu
   return { success: true };
 }
 
+export async function getNextPoNumberAction() {
+  const poNumber = await generateNextPoNumber();
+  return { poNumber };
+}
+
 export async function createPurchaseOrderAction(data: {
-  poNumber: string;
+  poNumber?: string;
   customerId: string;
   customerName: string;
   companyName?: string;
@@ -2346,6 +2368,12 @@ export async function createPurchaseOrderAction(data: {
 }) {
   try {
     const performedBy = await getCurrentUserId();
+
+    // Ensure standardized CPO-YYYY-XXXXXXXX number format
+    let finalPoNumber = data.poNumber?.trim();
+    if (!finalPoNumber || !finalPoNumber.startsWith("CPO-")) {
+      finalPoNumber = await generateNextPoNumber();
+    }
 
     // Compute total amount from items + product prices if not supplied
     let resolvedTotalAmount = data.totalAmount || 0;
@@ -2365,7 +2393,7 @@ export async function createPurchaseOrderAction(data: {
 
     const created = await erpDb.purchaseOrders.create({
       data: {
-        poNumber: data.poNumber,
+        poNumber: finalPoNumber,
         customerId: data.customerId,
         customerName: data.customerName,
         companyName: data.companyName || "",
@@ -2409,7 +2437,12 @@ export async function createPurchaseOrderAction(data: {
       }
     }
 
-    auditLog("PO_CREATED", performedBy, data.customerId, { poNumber: data.poNumber, totalAmount: resolvedTotalAmount });
+    // Sync to CRM crm.crm_purchase_orders
+    if (created?.id) {
+      await syncErpPoToCrm(created.id);
+    }
+
+    auditLog("PO_CREATED", performedBy, data.customerId, { poNumber: finalPoNumber, totalAmount: resolvedTotalAmount });
 
     revalidatePath("/purchase-orders");
     revalidatePath("/dashboard");
