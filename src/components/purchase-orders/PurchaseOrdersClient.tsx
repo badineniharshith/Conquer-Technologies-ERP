@@ -37,7 +37,8 @@ import {
   MapPin,
   DollarSign,
   BadgeIndianRupee,
-  Hash
+  Hash,
+  RefreshCw
 } from "lucide-react";
 import SearchableDropdown from "@/components/ui/SearchableDropdown";
 import { motion, AnimatePresence, AnimatedModal, StaggerContainer, StaggerItem } from "@/components/ui/motion";
@@ -95,6 +96,7 @@ export default function PurchaseOrdersClient({
     { sku: products[0]?.sku || "", quantity: 1, unitPrice: 0, priceLoading: false }
   ]);
   const [createLoading, setCreateLoading] = useState(false);
+  const [crmSyncing, setCrmSyncing] = useState(false);
 
   // Computed total amount
   const totalAmount = useMemo(() =>
@@ -279,6 +281,28 @@ export default function PurchaseOrdersClient({
     } catch {}
   };
 
+  const handleSyncFromCrm = async () => {
+    setCrmSyncing(true);
+    try {
+      const res = await fetch("/api/purchase-orders/crm-sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+      const data = await res.json();
+      if (data.success) {
+        if (data.synced > 0) {
+          toast.success(`✅ Synced ${data.synced} PO(s) from CRM: ${data.syncedPOs?.join(", ")}`);
+          router.refresh();
+        } else {
+          toast.info("All CRM POs are already in ERP — nothing to sync.");
+        }
+      } else {
+        toast.error(`Sync failed: ${data.error}`);
+      }
+    } catch (err: any) {
+      toast.error(`Sync error: ${err.message}`);
+    } finally {
+      setCrmSyncing(false);
+    }
+  };
+
   const resetForm = () => {
     setNewPoNumber("");
     setSelectedCustomerId("");
@@ -353,15 +377,32 @@ export default function PurchaseOrdersClient({
         </div>
 
         {isStaff && (
-          <motion.button
-            onClick={handleOpenCreateModal}
-            whileHover={{ scale: 1.02, y: -1 }}
-            whileTap={{ scale: 0.97 }}
-            className="px-4 py-2.5 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-bold text-xs rounded-xl shadow-md shadow-orange-500/15 transition-all flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
-          >
-            <Plus className="w-4 h-4" />
-            <span>New Purchase Order</span>
-          </motion.button>
+          <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+            <motion.button
+              onClick={handleSyncFromCrm}
+              disabled={crmSyncing}
+              whileHover={{ scale: crmSyncing ? 1 : 1.02, y: crmSyncing ? 0 : -1 }}
+              whileTap={{ scale: 0.97 }}
+              title="Pull any new POs created in CRM into ERP"
+              className="px-4 py-2.5 bg-white hover:bg-stone-50 border border-stone-300 text-stone-700 font-bold text-xs rounded-xl shadow-sm transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {crmSyncing ? (
+                <Loader2 className="w-4 h-4 animate-spin text-orange-500" />
+              ) : (
+                <RefreshCw className="w-4 h-4 text-orange-500" />
+              )}
+              <span>{crmSyncing ? "Syncing from CRM..." : "Sync from CRM"}</span>
+            </motion.button>
+            <motion.button
+              onClick={handleOpenCreateModal}
+              whileHover={{ scale: 1.02, y: -1 }}
+              whileTap={{ scale: 0.97 }}
+              className="px-4 py-2.5 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-bold text-xs rounded-xl shadow-md shadow-orange-500/15 transition-all flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+            >
+              <Plus className="w-4 h-4" />
+              <span>New Purchase Order</span>
+            </motion.button>
+          </div>
         )}
       </motion.div>
 
