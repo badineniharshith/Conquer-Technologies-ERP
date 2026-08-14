@@ -14,10 +14,10 @@ export async function generateNextPoNumber(): Promise<string> {
       select: { poNumber: true }
     });
 
-    // 2. Query CRM crm_purchase_orders directly via raw SQL
+    // 2. Query CRM purchase_orders directly via raw SQL
     let crmPoNumbers: string[] = [];
     try {
-      const crmRows: any[] = await prisma.$queryRawUnsafe('SELECT po_number FROM crm.crm_purchase_orders');
+      const crmRows: any[] = await prisma.$queryRawUnsafe('SELECT po_number FROM crm.purchase_orders');
       crmPoNumbers = crmRows.map(r => r.po_number);
     } catch {}
 
@@ -47,7 +47,7 @@ export async function generateNextPoNumber(): Promise<string> {
 }
 
 /**
- * Syncs an ERP Purchase Order to CRM table (crm.crm_purchase_orders & crm.crm_purchase_order_items)
+ * Syncs an ERP Purchase Order to CRM table (crm.purchase_orders & crm.purchase_order_items)
  */
 export async function syncErpPoToCrm(erpPoId: string) {
   try {
@@ -68,19 +68,21 @@ export async function syncErpPoToCrm(erpPoId: string) {
     const customerIdInt = 5876;
     const createdByInt = 187;
 
-    const poStatus = erpPo.verificationStatus === "Verified" ? "Cleared" : "Pending_Verification";
+    const isVerified = erpPo.verificationStatus === "Verified";
+    const isApproved = erpPo.approvalStatus === "Approved" || erpPo.approvalStatus === "APPROVED";
+    const poStatus = (isVerified && isApproved) ? "Cleared" : (isVerified ? "Verified" : "Pending_Verification");
     const erpSyncStatus = "SYNCED";
     const erpVerificationStatus = erpPo.verificationStatus || "Pending";
-    const approvalStatus = erpPo.approvalStatus || "Pending";
+    const approvalStatus = erpPo.approvalStatus || "Pending Approval";
 
-    // Upsert into crm.crm_purchase_orders via raw SQL
+    // Upsert into crm.purchase_orders via raw SQL
     await prisma.$executeRawUnsafe(`
-      INSERT INTO crm.crm_purchase_orders (
+      INSERT INTO crm.purchase_orders (
         po_number, customer_po_number, lead_id, customer_id, company_name, gst_number,
         primary_contact_name, phone, email, billing_address, shipping_address, subtotal,
         "taxAmount", "freightAmount", "grandTotal", currency, po_status, erp_sync_status,
-        erp_verification_status, approval_status, erp_reference_id, created_by,
-        assigned_sales_executive, created_at, updated_at
+        erp_verification_status, approval_status, erp_reference_id, created_by_id,
+        assigned_sales_executive_id, created_at, updated_at
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, NOW(), NOW()
       ) ON CONFLICT (po_number) DO UPDATE SET
@@ -119,15 +121,16 @@ export async function syncErpPoToCrm(erpPoId: string) {
       createdByInt
     );
 
-    // Upsert items into crm.crm_purchase_order_items
+    // Upsert items into crm.purchase_order_items
     for (const item of items) {
       await prisma.$executeRawUnsafe(`
-        INSERT INTO crm.crm_purchase_order_items (
-          po_number, product_name, sku, description, quantity, uom, "unitPrice", discount, tax, total
+        INSERT INTO crm.purchase_order_items (
+          purchase_order_id, po_number, product_name, sku, description, quantity, uom, "unitPrice", discount, tax, total, created_at, updated_at
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW()
         );
       `,
+        erpPo.id,
         erpPo.poNumber,
         item.productName || item.sku || "Product",
         item.sku || "SKU",

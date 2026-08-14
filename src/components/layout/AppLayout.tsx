@@ -89,18 +89,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
     );
   }
 
-  if (isCustomerPortal) {
-    return (
-      <div className="min-h-screen bg-stone-50 text-stone-900 flex flex-col">
-        <VConquerHeader />
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 w-full">
-          {!mounted || !sessionChecked ? <PageSkeleton /> : children}
-        </main>
-        <Toaster richColors position="top-right" theme="light" />
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen flex bg-stone-50 text-stone-900">
       {/* Sidebar (desktop fixed + mobile drawer) */}
@@ -162,7 +150,7 @@ function ScrollToTopButton() {
   return (
     <button
       onClick={scrollToTop}
-      className="fixed bottom-6 right-6 z-50 p-3 bg-stone-900 text-white rounded-full shadow-2xl hover:bg-[#8c3120] transition-all cursor-pointer flex items-center justify-center border border-stone-700"
+      className="fixed bottom-5 right-5 z-40 p-2.5 bg-stone-900/90 hover:bg-[#8c3120] text-white rounded-full shadow-lg transition-all duration-300 cursor-pointer flex items-center justify-center border border-stone-700 hover:scale-110 active:scale-95 backdrop-blur-xs"
       title="Scroll to top"
     >
       <svg className="w-5 h-5 -rotate-90" viewBox="0 0 36 36">

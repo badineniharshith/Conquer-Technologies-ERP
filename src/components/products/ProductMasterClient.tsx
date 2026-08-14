@@ -600,23 +600,6 @@ export default function ProductMasterClient({
                 />
               </div>
 
-              {activeRole !== "CUSTOMER" ? (
-                <div>
-                  <label className="block text-[9px] font-bold text-stone-400 uppercase tracking-wider mb-1">Availability</label>
-                  <SearchableDropdown
-                    options={[
-                      { value: "All", label: "All Availability" },
-                      { value: "In Stock", label: "In Stock" },
-                      { value: "Out of Stock", label: "Out of Stock" }
-                    ]}
-                    value={selectedAvailability}
-                    onChange={(val) => updateFilters({ availability: val })}
-                  />
-                </div>
-              ) : (
-                <div className="hidden sm:block"></div>
-              )}
-
               <div>
                 <label className="block text-[9px] font-bold text-stone-400 uppercase tracking-wider mb-1">Status</label>
                 <SearchableDropdown
@@ -652,14 +635,10 @@ export default function ProductMasterClient({
                  <tr className="bg-stone-50 text-stone-500 font-semibold uppercase tracking-wider border-b border-stone-200">
                    <th className="px-6 py-3">SKU</th>
                    <th className="px-6 py-3">Product Name</th>
-                   <th className="px-6 py-3">Brand</th>
+                   <th className="px-6 py-3">Brand / OEM</th>
                    <th className="px-6 py-3">Category</th>
-                   <th className="px-6 py-3">Barcode</th>
-                   {activeRole !== "CUSTOMER" && <th className="px-6 py-3 text-right">Safety Stock</th>}
-                   {activeRole !== "CUSTOMER" && <th className="px-6 py-3 text-right">Reorder Level</th>}
-                   {activeRole !== "CUSTOMER" && <th className="px-6 py-3 text-center">Serial Tracking</th>}
-                   <th className="px-6 py-3 text-center">Status</th>
-                   {activeRole === "CUSTOMER" && <th className="px-6 py-3 text-center">Action</th>}
+                   <th className="px-6 py-3 text-right">Unit Price</th>
+                   <th className="px-6 py-3 text-center">Action</th>
                  </tr>
                </thead>
                <tbody className="divide-y divide-stone-100">
@@ -668,74 +647,31 @@ export default function ProductMasterClient({
                       <td 
                         onClick={() => setSelectedProductDetail(p)}
                         className="px-6 py-4 font-mono font-bold text-orange-600 cursor-pointer hover:underline"
-                        title="Click to view Product Details Portal"
+                        title="Click to view Product Details"
                       >
                        {highlightText(p.sku, queryToHighlight)}
                      </td>
                      <td 
                         onClick={() => setSelectedProductDetail(p)}
                         className="px-6 py-4 font-semibold text-stone-850 cursor-pointer hover:text-orange-600 transition-colors"
-                        title="Click to view Product Details Portal"
+                        title="Click to view Product Details"
                      >
                        {highlightText(p.name, queryToHighlight)}
                      </td>
                     <td className="px-6 py-4 text-stone-600 font-medium">
-                      {highlightText(p.brand, queryToHighlight)}
+                      {highlightText(p.brand || "Generic", queryToHighlight)}
                     </td>
                     <td className="px-6 py-4 text-stone-655 font-medium">
                       <div className="flex items-center space-x-1.5">
                         <Tag className="w-3.5 h-3.5 text-orange-400" />
-                        <span>{highlightText(p.category?.name || "Smartphones", queryToHighlight)}</span>
+                        <span>{highlightText(p.categoryName || p.category?.name || "Apple Hardware", queryToHighlight)}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 font-mono text-stone-500 text-[10px]">
-                      <div className="flex items-center space-x-1">
-                        <Barcode className="w-4 h-4 text-stone-400" />
-                        <span>{p.barcode || "N/A"}</span>
-                      </div>
+                    <td className="px-6 py-4 text-right font-extrabold text-stone-900 font-mono">
+                      ₹{(p.price || 0).toLocaleString("en-IN")}
                     </td>
-                    {activeRole !== "CUSTOMER" && <td className="px-6 py-4 text-right font-semibold text-stone-500">{p.safetyStock} units</td>}
-                    {activeRole !== "CUSTOMER" && <td className="px-6 py-4 text-right font-bold text-stone-700">{p.reorderLevel} units</td>}
-                    {activeRole !== "CUSTOMER" && (
-                      <td className="px-6 py-4 text-center">
-                        <button
-                          onClick={() => handleToggleSerialTracking(p.id, p.serialTracking)}
-                          disabled={!isStaff}
-                          className={`inline-flex items-center space-x-1 px-2.5 py-1 rounded text-[10px] font-bold border transition-all duration-200 ease-in-out ${
-                            p.serialTracking
-                              ? "bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 active:scale-95"
-                              : "bg-stone-50 text-stone-500 border-stone-200 hover:bg-stone-100 active:scale-95"
-                          } disabled:opacity-80 cursor-pointer`}
-                        >
-                          {p.serialTracking ? "ENABLED" : "DISABLED"}
-                        </button>
-                      </td>
-                    )}
                     <td className="px-6 py-4 text-center">
-                      <button
-                        onClick={() => handleToggleStatus(p.id, p.status)}
-                        disabled={!isStaff}
-                        className={`inline-flex items-center space-x-1 px-2.5 py-1 rounded text-[10px] font-bold border transition-all duration-200 ease-in-out ${
-                          p.status === "ACTIVE"
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 active:scale-95"
-                            : "bg-red-50 text-red-700 border-red-200 hover:bg-red-100 active:scale-95"
-                        } disabled:opacity-80 cursor-pointer`}
-                      >
-                        {p.status === "ACTIVE" ? (
-                          <>
-                            <CheckCircle className="w-3 h-3 text-emerald-600" />
-                            <span>ACTIVE</span>
-                          </>
-                        ) : (
-                          <>
-                            <XCircle className="w-3 h-3 text-red-650" />
-                            <span>DEACTIVE</span>
-                          </>
-                        )}
-                      </button>
-                    </td>
-                    {activeRole === "CUSTOMER" && (
-                      <td className="px-6 py-4 text-center">
+                      {activeRole === "CUSTOMER" ? (
                         <button
                           onClick={() => {
                             const catalogProduct = products.find(prod => prod.sku === p.sku);
@@ -744,17 +680,24 @@ export default function ProductMasterClient({
                             setReserveQuantity(1);
                             setShowReserveModal(true);
                           }}
-                          className="px-2.5 py-1 bg-orange-500 hover:bg-orange-655 text-white font-bold rounded text-[10px] cursor-pointer transition-all active:scale-95 shadow-sm"
+                          className="px-3 py-1.5 bg-[#8c3120] hover:bg-[#742718] text-white font-bold rounded-lg text-[11px] cursor-pointer transition-all active:scale-95 shadow-xs"
                         >
                           Reserve
                         </button>
-                      </td>
-                    )}
+                      ) : (
+                        <button
+                          onClick={() => setSelectedProductDetail(p)}
+                          className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold rounded-lg text-[11px] cursor-pointer transition-all border border-stone-200"
+                        >
+                          Details
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
                 {sortedProducts.length === 0 && (
                   <tr>
-                    <td colSpan={activeRole === "CUSTOMER" ? 9 : 9} className="px-6 py-8 text-center text-stone-400 italic">
+                    <td colSpan={6} className="px-6 py-8 text-center text-stone-400 italic">
                       No matching catalog products found.
                     </td>
                   </tr>
@@ -764,7 +707,7 @@ export default function ProductMasterClient({
           </div>
 
           {totalPages > 1 && (
-            <div className="flex flex-col sm:flex-row justify-between items-center bg-white border border-stone-250 rounded-2xl px-4 py-3 shadow-sm gap-3 mt-3">
+            <div className="flex flex-col sm:flex-row justify-between items-center bg-white border border-stone-250 rounded-2xl px-4 py-3 shadow-sm gap-3 mt-3 mr-12 sm:mr-14">
               <span className="text-[10px] text-stone-400 font-bold uppercase tracking-wider">
                 Showing {Math.min(totalFilteredCount, (currentPage - 1) * 10 + 1)}-{Math.min(totalFilteredCount, currentPage * 10)} of {totalFilteredCount} items
               </span>

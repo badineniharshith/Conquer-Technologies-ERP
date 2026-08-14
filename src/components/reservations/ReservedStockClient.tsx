@@ -35,6 +35,8 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo } from "react";
+import { AnimatedModal } from "@/components/ui/motion";
+import PODetailsModal from "@/components/purchase-orders/PODetailsModal";
 
 interface ReservedStockClientProps {
   reservations: any[];
@@ -79,6 +81,9 @@ export default function ReservedStockClient({
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingRes, setEditingRes] = useState<any | null>(null);
   const [editLoading, setEditLoading] = useState(false);
+
+  // PO Details Modal State
+  const [selectedPoForModal, setSelectedPoForModal] = useState<string | null>(null);
 
   const isCustomer = currentUser.role === "CUSTOMER";
 
@@ -1538,6 +1543,18 @@ export default function ReservedStockClient({
           </div>
         </div>
       )}
+
+      {/* PO Details & Printable PDF Modal */}
+      <AnimatedModal open={!!selectedPoForModal} onClose={() => setSelectedPoForModal(null)}>
+        <div className="bg-white/95 backdrop-blur-xl border border-orange-200/70 p-6 rounded-2xl shadow-xl w-full max-w-4xl relative animate-scale-in">
+          {selectedPoForModal && (
+            <PODetailsModal 
+              poIdentifier={selectedPoForModal} 
+              onClose={() => setSelectedPoForModal(null)} 
+            />
+          )}
+        </div>
+      </AnimatedModal>
     </div>
   );
 }

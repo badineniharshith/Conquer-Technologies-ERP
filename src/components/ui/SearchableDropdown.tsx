@@ -154,8 +154,8 @@ export default function SearchableDropdown({
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 right-0 z-50 mt-2 w-full origin-top rounded-2xl bg-white border border-stone-200 shadow-2xl ring-1 ring-black/5 animate-in fade-in-30 slide-in-from-top-2 duration-200 overflow-hidden">
-          <div className="p-2.5 border-b border-stone-100 flex items-center space-x-2 bg-stone-50/50">
+        <div className="absolute left-0 right-0 z-[9999] mt-2 w-full origin-top rounded-2xl bg-white border border-stone-200 shadow-2xl ring-1 ring-black/10 animate-in fade-in-50 slide-in-from-top-2 duration-200 overflow-hidden" style={{ backgroundColor: "#ffffff" }}>
+          <div className="p-2.5 border-b border-stone-100 flex items-center space-x-2 bg-stone-50">
             <Search className="w-4 h-4 text-stone-400 shrink-0" />
             <input
               ref={inputRef}
@@ -170,9 +170,10 @@ export default function SearchableDropdown({
           <div
             ref={listRef}
             className="max-h-60 overflow-y-auto p-1.5 space-y-1 bg-white"
+            style={{ backgroundColor: "#ffffff" }}
           >
             {filteredOptions.length === 0 ? (
-              <div className="px-4 py-3 text-center text-stone-400 italic text-[11px]">
+              <div className="px-4 py-3 text-center text-stone-400 italic text-[11px] bg-white">
                 No options found
               </div>
             ) : (
@@ -181,7 +182,7 @@ export default function SearchableDropdown({
                   return (
                     <div
                       key={`header-${opt.label}-${index}`}
-                      className="px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-orange-600 bg-orange-50/80 rounded-lg mt-1"
+                      className="px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-[#8c3120] bg-stone-100 rounded-lg mt-1"
                     >
                       {opt.label}
                     </div>
@@ -192,15 +193,15 @@ export default function SearchableDropdown({
                   <button
                     key={opt.value}
                     type="button"
-                    onMouseDown={(e) => {
+                    onClick={(e) => {
                       e.preventDefault();
+                      e.stopPropagation();
                       handleSelect(opt.value);
                     }}
-                    onClick={() => handleSelect(opt.value)}
-                    className={`w-full text-left px-3 py-2 rounded-xl text-xs transition-all flex items-center justify-between ${
+                    className={`w-full text-left px-3 py-2 rounded-xl text-xs transition-all duration-200 flex items-center justify-between cursor-pointer ${
                       isSelected
-                        ? "bg-orange-500 text-white font-bold shadow-md shadow-orange-550/15"
-                        : "hover:bg-stone-50 text-stone-700 hover:text-stone-900 font-medium"
+                        ? "bg-[#8c3120] text-white font-bold shadow-sm"
+                        : "hover:bg-stone-100 text-stone-700 hover:text-stone-950 font-medium"
                     }`}
                   >
                     <span className="truncate">{opt.label}</span>

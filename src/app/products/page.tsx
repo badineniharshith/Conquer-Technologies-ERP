@@ -22,70 +22,118 @@ export default async function ProductsPage({ searchParams }: PageProps) {
   const selectedCategory = params.category || "All";
   const selectedStatus = params.status || "All";
 
-  const whereClause: any = {};
+  // 1. Fetch ERP products
+  const erpProducts = await prisma.product.findMany({
+    include: {
+      category: true,
+    },
+    orderBy: { createdAt: "desc" },
+  });
 
-  if (selectedBrand !== "All") {
-    whereClause.brand = { equals: selectedBrand, mode: "insensitive" };
+  // 2. Fetch CRM products via Raw SQL
+  let crmProductsRaw: any[] = [];
+  try {
+    crmProductsRaw = await prisma.$queryRawUnsafe(`
+      SELECT 
+        id, sku, name, brand, price, cost_price, market_price, 
+        category, status, item_number, "createdAt"
+      FROM crm.products
+      ORDER BY id DESC;
+    `);
+  } catch (err: any) {
+    console.error("Error fetching CRM products:", err.message);
   }
-  if (selectedCategory !== "All") {
-    whereClause.categoryId = selectedCategory;
-  }
-  if (selectedStatus !== "All") {
-    whereClause.status = selectedStatus;
-  }
 
-  const finalQuery = q.trim();
-  if (finalQuery) {
-    whereClause.OR = [
-      { name: { contains: finalQuery, mode: "insensitive" } },
-      { sku: { contains: finalQuery, mode: "insensitive" } },
-      { brand: { contains: finalQuery, mode: "insensitive" } }
-    ];
-  }
+  // 3. Fetch Categories
+  const categories = await prisma.category.findMany({
+    select: { id: true, name: true }
+  });
 
-  const itemsPerPage = 50;
+  // Map ERP products
+  const erpMapped = erpProducts.map(p => ({
+    id: p.id,
+    sku: p.sku,
+    name: p.name,
+    brand: p.brand || "Generic",
+    price: Number(p.sellingPrice || p.costPrice || 0),
+    costPrice: Number(p.costPrice || 0),
+    marketPrice: Number(p.marketPrice || 0),
+    categoryId: p.categoryId,
+    categoryName: p.category?.name || "Apple Hardware",
+    barcode: p.barcode || "N/A",
+    itemNumber: p.itemNumber || null,
+    status: p.status || "ACTIVE",
+    source: "ERP"
+  }));
 
-  const [productsData, totalFilteredCount, categories] = await Promise.all([
-    prisma.product.findMany({
-      where: whereClause,
-      include: {
-        category: true,
-      },
-      orderBy: { createdAt: "desc" },
-      take: itemsPerPage,
-      skip: (page - 1) * itemsPerPage
-    }),
-    prisma.product.count({ where: whereClause }),
-    prisma.category.findMany({
-      select: {
-        id: true,
-        name: true
-      }
-    })
-  ]);
+  // Map CRM products
+  const crmMapped = crmProductsRaw.map(p => ({
+    id: `crm-${p.id}`,
+    sku: p.sku,
+    name: p.name,
+    brand: p.brand || "Generic",
+    price: Number(p.price || p.cost_price || 0),
+    costPrice: Number(p.cost_price || 0),
+    marketPrice: Number(p.market_price || 0),
+    categoryId: null,
+    categoryName: p.category || "Apple Hardware",
+    barcode: "N/A",
+    itemNumber: p.item_number || null,
+    status: p.status || "ACTIVE",
+    source: "CRM"
+  }));
 
-  const paginatedSkus = productsData.map(p => p.sku);
+  // Combine products: tag as 'CRM & ERP' if SKU exists in both
+  const combinedProductsMap = new Map<string, any>();
 
-  const inventory = await prisma.inventory.findMany({
-    where: { sku: { in: paginatedSkus } },
-    select: {
-      sku: true,
-      branchCode: true,
-      quantity: true,
-      availableQty: true,
-      reservedQty: true
+  erpMapped.forEach(p => {
+    combinedProductsMap.set(p.sku, { ...p, source: "ERP" });
+  });
+
+  crmMapped.forEach(p => {
+    if (combinedProductsMap.has(p.sku)) {
+      const existing = combinedProductsMap.get(p.sku)!;
+      combinedProductsMap.set(p.sku, { ...existing, source: "CRM & ERP" });
+    } else {
+      combinedProductsMap.set(p.sku, { ...p, source: "CRM" });
     }
   });
 
-  const serializedProducts = serializeData<any[]>(productsData);
+  let allProducts = Array.from(combinedProductsMap.values());
+
+  // Apply filters
+  if (selectedBrand !== "All") {
+    allProducts = allProducts.filter(p => p.brand.toLowerCase() === selectedBrand.toLowerCase());
+  }
+  if (selectedCategory !== "All") {
+    allProducts = allProducts.filter(p => p.categoryId === selectedCategory || p.categoryName.toLowerCase().includes(selectedCategory.toLowerCase()));
+  }
+  if (selectedStatus !== "All") {
+    allProducts = allProducts.filter(p => p.status === selectedStatus);
+  }
+
+  const queryTrim = q.trim().toLowerCase();
+  if (queryTrim) {
+    allProducts = allProducts.filter(p => 
+      p.name.toLowerCase().includes(queryTrim) ||
+      p.sku.toLowerCase().includes(queryTrim) ||
+      p.brand.toLowerCase().includes(queryTrim) ||
+      p.categoryName.toLowerCase().includes(queryTrim)
+    );
+  }
+
+  const itemsPerPage = 50;
+  const totalFilteredCount = allProducts.length;
+  const paginatedProducts = allProducts.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+
+  const serializedProducts = serializeData<any[]>(paginatedProducts);
   const serializedCategories = serializeData<any[]>(categories);
-  const serializedInventory = serializeData<any[]>(inventory);
 
   return (
     <ProductMasterClient
       products={serializedProducts}
       categories={serializedCategories}
-      inventory={serializedInventory}
+      inventory={[]}
       prices={[]}
       predictions={[]}
       searchQueryString={q}

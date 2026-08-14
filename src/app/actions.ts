@@ -2229,11 +2229,26 @@ export async function verifyPurchaseOrderAction(poId: string) {
     where: { id: poId },
     data: {
       verificationStatus: "Verified",
+      erpVerificationStatus: "Verified",
+      poStatus: (po as any).approvalStatus === "Approved" ? "Cleared" : "Verified",
       stockStatus: "Available",
       verifiedBy: performedBy,
       verifiedDate: now
     }
   });
+
+  // Also sync directly to CRM schema
+  try {
+    await prisma.$executeRawUnsafe(`
+      UPDATE crm.purchase_orders
+      SET erp_verification_status = 'Verified',
+          po_status = CASE WHEN approval_status = 'Approved' THEN 'Cleared' ELSE 'Verified' END,
+          updated_at = NOW()
+      WHERE po_number = $1 OR erp_reference_id = $2
+    `, po.poNumber, poId);
+  } catch (err: any) {
+    console.error("Direct CRM DB update error during verify:", err.message);
+  }
 
   // Dual-sync PO & Stock Reservation across CRM and ERP schemas
   await syncPoStockReservation(poId);
@@ -2260,9 +2275,8 @@ export async function verifyPurchaseOrderAction(poId: string) {
         updatedAt: now
       }
     });
-  } catch (oppErr: any) {
-    // Don't fail the whole action if opportunity creation fails (e.g. duplicate)
-    console.error("Opportunity creation warning:", oppErr.message);
+  } catch (_) {
+    // Non-fatal if opportunity model or unique constraint fails
   }
 
   const notifDetail = stockWarningMsg 
@@ -2295,6 +2309,49 @@ export async function verifyPurchaseOrderAction(poId: string) {
   revalidatePath("/dashboard");
 
   return { success: true, opportunityNumber, warning: stockWarningMsg || undefined };
+}
+
+export async function approvePurchaseOrderAction(poId: string) {
+  const performedBy = await getCurrentUserId();
+  const po = await erpDb.purchaseOrders.findUnique({ where: { id: poId } });
+  if (!po) {
+    return { error: "Purchase Order not found" };
+  }
+
+  const now = new Date();
+
+  // Update PO to Approved in ERP
+  await erpDb.purchaseOrders.update({
+    where: { id: poId },
+    data: {
+      approvalStatus: "Approved",
+      poStatus: "Cleared",
+      verificationStatus: po.verificationStatus || "Verified",
+      erpVerificationStatus: "Verified",
+      updatedAt: now
+    }
+  });
+
+  // Directly update CRM schema crm.purchase_orders
+  try {
+    await prisma.$executeRawUnsafe(`
+      UPDATE crm.purchase_orders
+      SET approval_status = 'Approved',
+          erp_verification_status = 'Verified',
+          po_status = 'Cleared',
+          updated_at = NOW()
+      WHERE po_number = $1 OR erp_reference_id = $2
+    `, po.poNumber, poId);
+  } catch (err: any) {
+    console.error("Direct CRM DB update error during approve:", err.message);
+  }
+
+  await syncErpPoToCrm(poId);
+
+  revalidatePath("/purchase-orders");
+  revalidatePath("/dashboard");
+
+  return { success: true, poNumber: po.poNumber };
 }
 
 export async function lookupPurchaseOrderByNumberAction(poNumber: string) {

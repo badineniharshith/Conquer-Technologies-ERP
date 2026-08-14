@@ -5,6 +5,7 @@ import { useErpStore } from "@/lib/store";
 import { 
   checkStockAvailabilityAction, 
   verifyPurchaseOrderAction, 
+  approvePurchaseOrderAction,
   createPurchaseOrderAction,
   lookupPurchaseOrderByNumberAction,
   getProductPriceAction,
@@ -43,6 +44,7 @@ import {
 import SearchableDropdown from "@/components/ui/SearchableDropdown";
 import { motion, AnimatePresence, AnimatedModal, StaggerContainer, StaggerItem } from "@/components/ui/motion";
 import UnifiedPOAutoChecker from "./UnifiedPOAutoChecker";
+import PODetailsModal from "./PODetailsModal";
 
 interface PurchaseOrdersClientProps {
   initialPurchaseOrders: any[];
@@ -220,6 +222,23 @@ export default function PurchaseOrdersClient({
       }
     } catch (e: any) {
       toast.error(e.message || "Failed to verify PO");
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleApprovePo = async (poId: string) => {
+    setActionLoadingId(poId);
+    try {
+      const res = await approvePurchaseOrderAction(poId);
+      if (res.error) {
+        toast.error(res.error);
+      } else {
+        toast.success(`🎉 Purchase Order ${res.poNumber} has been approved and cleared!`);
+        router.refresh();
+      }
+    } catch (e: any) {
+      toast.error(e.message || "Failed to approve PO");
     } finally {
       setActionLoadingId(null);
     }
@@ -518,8 +537,9 @@ export default function PurchaseOrdersClient({
                   <tr key={po.id} className="table-row-hover animate-fade-in-up" style={{ animationDelay: `${idx * 0.04}s`, animationFillMode: 'both' }}>
                     <td className="px-5 py-4 font-mono font-black text-orange-655 text-sm">
                       <button
-                        onClick={() => isStaff ? setSelectedAuditPoId(po.id) : undefined}
-                        className={`font-black text-left text-orange-655 transition-colors focus:outline-none ${isStaff ? "hover:underline hover:text-orange-700 cursor-pointer" : "cursor-default"}`}
+                        onClick={() => setSelectedAuditPoId(po.id)}
+                        className="font-black text-left text-orange-655 hover:underline hover:text-orange-700 cursor-pointer transition-colors focus:outline-none"
+                        title="Click to view Customer Order, Discounts, Stock Allocation & Printable PDF"
                       >
                         {po.poNumber}
                       </button>
@@ -566,36 +586,77 @@ export default function PurchaseOrdersClient({
                       </td>
                     )}
                     <td className="px-5 py-4 text-center">
-                      <span className={`inline-flex items-center gap-1 text-[10px] font-black uppercase px-2.5 py-1 rounded-full ${getVerifyBadge(po.verificationStatus)}`}>
-                        {isVerified ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                        {po.verificationStatus}
-                      </span>
+                      <div className="flex flex-col items-center gap-1">
+                        <span className={`inline-flex items-center gap-1 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${getVerifyBadge(po.verificationStatus)}`}>
+                          {isVerified ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                          Verify: {po.verificationStatus}
+                        </span>
+                        <span className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                          po.approvalStatus === 'Approved' || po.approvalStatus === 'APPROVED'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-amber-50 text-amber-700 border border-amber-200'
+                        }`}>
+                          Approve: {po.approvalStatus || 'Pending Approval'}
+                        </span>
+                      </div>
                     </td>
                     {isStaff && (
                       <td className="px-5 py-4 text-center">
-                        <button
-                          onClick={() => handleVerifyStock(po.id)}
-                          disabled={isLoading || isVerified}
-                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-[10px] transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
-                            isVerified
-                              ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
-                              : "bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white shadow-sm shadow-orange-500/20"
-                          }`}
-                        >
-                          {isLoading ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          ) : isVerified ? (
-                            <>
-                              <CheckCircle2 className="w-3 h-3" />
-                              Verified
-                            </>
-                          ) : (
-                            <>
-                              <ShieldCheck className="w-3 h-3" />
-                              Verify Stock
-                            </>
-                          )}
-                        </button>
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleVerifyStock(po.id)}
+                            disabled={isLoading || isVerified}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full font-extrabold text-[11px] transition-all cursor-pointer shadow-sm ${
+                              isVerified
+                                ? "bg-emerald-700 text-white border border-emerald-800 opacity-90 cursor-default"
+                                : "bg-[#8c3120] hover:bg-[#742718] text-white hover:shadow-md active:scale-95"
+                            } ${isLoading ? "opacity-70 cursor-not-allowed" : ""}`}
+                            style={{ color: "#ffffff", backgroundColor: isVerified ? "#047857" : "#8c3120" }}
+                            title={isVerified ? "Already Verified" : "Verify Stock Availability"}
+                          >
+                            {isLoading ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                            ) : isVerified ? (
+                              <>
+                                <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                                <span>Verified</span>
+                              </>
+                            ) : (
+                              <>
+                                <ShieldCheck className="w-3.5 h-3.5 text-white" />
+                                <span>Verify</span>
+                              </>
+                            )}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleApprovePo(po.id)}
+                            disabled={isLoading || (po.approvalStatus === 'Approved' || po.approvalStatus === 'APPROVED')}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full font-extrabold text-[11px] transition-all cursor-pointer shadow-sm ${
+                              (po.approvalStatus === 'Approved' || po.approvalStatus === 'APPROVED')
+                                ? "bg-emerald-700 text-white border border-emerald-800 opacity-90 cursor-default"
+                                : "bg-emerald-600 hover:bg-emerald-700 text-white hover:shadow-md active:scale-95"
+                            } ${isLoading ? "opacity-70 cursor-not-allowed" : ""}`}
+                            style={{ color: "#ffffff", backgroundColor: (po.approvalStatus === 'Approved' || po.approvalStatus === 'APPROVED') ? "#047857" : "#059669" }}
+                            title={(po.approvalStatus === 'Approved' || po.approvalStatus === 'APPROVED') ? "Already Approved" : "Approve Purchase Order"}
+                          >
+                            {isLoading ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                            ) : (po.approvalStatus === 'Approved' || po.approvalStatus === 'APPROVED') ? (
+                              <>
+                                <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                                <span>Approved</span>
+                              </>
+                            ) : (
+                              <>
+                                <UserCheck className="w-3.5 h-3.5 text-white" />
+                                <span>Approve</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
                       </td>
                     )}
                   </tr>
@@ -888,12 +949,12 @@ export default function PurchaseOrdersClient({
           </div>
       </AnimatedModal>
 
-      {/* Real-time PO Audit Modal */}
+      {/* Real-time PO Audit & Printable PDF Modal */}
       <AnimatedModal open={!!selectedAuditPoId} onClose={() => setSelectedAuditPoId(null)}>
-        <div className="bg-white/95 backdrop-blur-xl border border-orange-200/70 p-6 rounded-2xl shadow-xl w-full max-w-lg relative animate-scale-in">
+        <div className="bg-white/95 backdrop-blur-xl border border-orange-200/70 p-6 rounded-2xl shadow-xl w-full max-w-4xl relative animate-scale-in">
           {selectedAuditPoId && (
-            <UnifiedPOAutoChecker 
-              purchaseOrderId={selectedAuditPoId} 
+            <PODetailsModal 
+              poIdentifier={selectedAuditPoId} 
               onClose={() => {
                 setSelectedAuditPoId(null);
                 router.refresh();
