@@ -2401,6 +2401,85 @@ export async function approvePurchaseOrderAction(poId: string) {
 
   const now = new Date();
 
+  // Deduct inventory & product catalog stock in real-time on PO approval
+  let items: any[] = [];
+  try {
+    items = typeof po.itemsJson === 'string' ? JSON.parse(po.itemsJson) : po.itemsJson;
+    if (!Array.isArray(items)) items = [];
+  } catch {}
+
+  const targetBranch = po.branchCode || "HYD-HQ";
+
+  for (const item of items) {
+    const sku = item.sku || null;
+    const name = item.productName || item.name || sku;
+    const qty = Number(item.quantity || item.requestedQty || 1);
+    if (!qty || qty <= 0) continue;
+
+    // 1. Update public.inventory table
+    let existingInv = null;
+    if (sku) {
+      existingInv = await prisma.inventory.findFirst({
+        where: { sku, branchCode: targetBranch }
+      });
+      if (!existingInv) {
+        existingInv = await prisma.inventory.findFirst({ where: { sku } });
+      }
+    } else if (name) {
+      existingInv = await prisma.inventory.findFirst({
+        where: { itemName: { equals: name, mode: "insensitive" } }
+      });
+    }
+
+    if (existingInv) {
+      const currentQty = Math.max(0, Number(existingInv.quantity || 0) - qty);
+      const currentRes = Math.max(0, Number(existingInv.reservedStock || existingInv.reservedQty || 0) - qty);
+      const currentAvail = Math.max(0, Number(existingInv.availableStock || existingInv.availableQty || 0) - qty);
+
+      await prisma.inventory.update({
+        where: { id: existingInv.id },
+        data: {
+          quantity: currentQty,
+          availableStock: currentAvail,
+          availableQty: currentAvail,
+          reservedStock: currentRes,
+          reservedQty: currentRes
+        }
+      });
+    }
+
+    // 2. Update crm.products catalog stock
+    try {
+      if (sku) {
+        await prisma.$executeRawUnsafe(
+          `UPDATE crm.products SET stock = GREATEST(0, stock - $1), updated_at = NOW() WHERE sku = $2`,
+          qty,
+          sku
+        );
+      } else if (name) {
+        await prisma.$executeRawUnsafe(
+          `UPDATE crm.products SET stock = GREATEST(0, stock - $1), updated_at = NOW() WHERE name ILIKE $2`,
+          qty,
+          `%${name}%`
+        );
+      }
+    } catch (e) {}
+
+    // 3. Log stock movement
+    try {
+      await prisma.inventoryMovement.create({
+        data: {
+          sku: sku || name || "ITEM",
+          branchCode: targetBranch,
+          type: "OUT",
+          quantity: qty,
+          details: `PO Approval Fulfillment: Deducted ${qty} units for PO ${po.poNumber} (${po.customerName || "Customer"})`,
+          userId: performedBy
+        }
+      });
+    } catch (e) {}
+  }
+
   // Update PO to Approved in ERP
   await erpDb.purchaseOrders.update({
     where: { id: poId },
@@ -2429,8 +2508,10 @@ export async function approvePurchaseOrderAction(poId: string) {
 
   await syncErpPoToCrm(poId);
 
-  revalidatePath("/purchase-orders");
-  revalidatePath("/dashboard");
+  try { revalidatePath("/purchase-orders"); } catch (e) {}
+  try { revalidatePath("/inventory"); } catch (e) {}
+  try { revalidatePath("/products"); } catch (e) {}
+  try { revalidatePath("/dashboard"); } catch (e) {}
 
   return { success: true, poNumber: po.poNumber };
 }

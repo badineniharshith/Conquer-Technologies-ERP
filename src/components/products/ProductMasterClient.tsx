@@ -960,11 +960,14 @@ export default function ProductMasterClient({
               <div className="grid grid-cols-3 gap-2 text-xs">
                 {["HYD-HQ", "HYD-THUB", "HYD-JH", "BLR", "CHN", "MUM", "DEL", "VZG", "VJA"].map((bCode) => {
                   const invItem = inventory.find((i: any) => i.sku === selectedProductDetail.sku && i.branchCode === bCode);
-                  const qty = invItem ? (invItem.availableQty || invItem.availableStock || invItem.quantity || 0) : 50;
+                  const isMainBranch = bCode === (selectedProductDetail.branchCode || "HYD-HQ");
+                  const qty = invItem 
+                    ? (invItem.availableStock ?? invItem.availableQty ?? invItem.quantity ?? 0)
+                    : (isMainBranch ? Number(selectedProductDetail.stock ?? selectedProductDetail.stockQuantity ?? 0) : 0);
                   return (
                     <div key={bCode} className="p-2.5 bg-stone-50 rounded-lg border border-stone-200 flex justify-between items-center">
                       <span className="font-bold text-stone-700 text-[11px]">{BRANCH_NAMES[bCode] || bCode}</span>
-                      <span className="font-extrabold text-orange-600">{qty} units</span>
+                      <span className={`font-extrabold ${qty > 0 ? "text-orange-600" : "text-stone-400"}`}>{qty} units</span>
                     </div>
                   );
                 })}
