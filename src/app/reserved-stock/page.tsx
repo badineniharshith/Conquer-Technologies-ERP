@@ -51,7 +51,21 @@ export default async function ReservedStockPage() {
 
   customers = await prisma.customer.findMany({
     where: { status: "ACTIVE" },
-    select: { id: true, name: true, email: true, phone: true }
+    select: { 
+      id: true, 
+      name: true, 
+      customerCode: true,
+      companyLegalName: true,
+      tradeName: true,
+      gstNumber: true,
+      email: true, 
+      phone: true,
+      billingAddress: true,
+      shippingAddress: true,
+      assignedExecutive: {
+        select: { id: true, name: true, email: true }
+      }
+    }
   });
 
   products = await prisma.product.findMany({

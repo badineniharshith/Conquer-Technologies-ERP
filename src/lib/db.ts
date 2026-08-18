@@ -601,8 +601,31 @@ export const erpDb = {
     },
     create: async (args: { data: any }) => {
       if (isDatabaseConnected()) {
+        const createData = { ...args.data };
+        if (createData.customerId) {
+          const custExists = await prisma.customer.findUnique({ where: { id: createData.customerId } }).catch(() => null);
+          if (custExists) {
+            createData.customer = { connect: { id: createData.customerId } };
+            delete createData.customerId;
+          }
+        }
+        if (createData.employeeId) {
+          const empExists = await prisma.user.findUnique({ where: { id: createData.employeeId } }).catch(() => null);
+          if (empExists) {
+            createData.employee = { connect: { id: createData.employeeId } };
+            delete createData.employeeId;
+          }
+        }
+        if (createData.productId) {
+          const prodExists = await prisma.product.findUnique({ where: { id: createData.productId } }).catch(() => null);
+          if (prodExists) {
+            createData.product = { connect: { id: createData.productId } };
+            delete createData.productId;
+          }
+        }
+        delete createData.draftedAt;
         return await prisma.stockReservation.create({
-          data: args.data,
+          data: createData,
           include: { customer: true, employee: true, product: true, items: { include: { product: true } } }
         });
       }
@@ -620,9 +643,32 @@ export const erpDb = {
     },
     update: async (args: { where: { id: string }; data: any }) => {
       if (isDatabaseConnected()) {
+        const updateData = { ...args.data };
+        if (updateData.customerId) {
+          const custExists = await prisma.customer.findUnique({ where: { id: updateData.customerId } }).catch(() => null);
+          if (custExists) {
+            updateData.customer = { connect: { id: updateData.customerId } };
+            delete updateData.customerId;
+          }
+        }
+        if (updateData.employeeId) {
+          const empExists = await prisma.user.findUnique({ where: { id: updateData.employeeId } }).catch(() => null);
+          if (empExists) {
+            updateData.employee = { connect: { id: updateData.employeeId } };
+            delete updateData.employeeId;
+          }
+        }
+        if (updateData.productId) {
+          const prodExists = await prisma.product.findUnique({ where: { id: updateData.productId } }).catch(() => null);
+          if (prodExists) {
+            updateData.product = { connect: { id: updateData.productId } };
+            delete updateData.productId;
+          }
+        }
+
         return await prisma.stockReservation.update({
           where: { id: args.where.id },
-          data: args.data,
+          data: updateData,
           include: { customer: true, employee: true, product: true, items: { include: { product: true } } }
         });
       }
@@ -736,7 +782,14 @@ export const erpDb = {
     },
     create: async (args: { data: any }) => {
       if (isDatabaseConnected()) {
-        return await prisma.notification.create({ data: args.data });
+        try {
+          if (!args.data?.userId) return null;
+          const uExists = await prisma.user.findUnique({ where: { id: args.data.userId } });
+          if (!uExists) return null;
+          return await prisma.notification.create({ data: args.data });
+        } catch (e) {
+          return null;
+        }
       }
       const item = { id: `noti-${Date.now()}`, createdAt: new Date(), read: false, ...args.data };
       mockStore.notifications.push(item);

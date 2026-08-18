@@ -13,7 +13,9 @@ import {
   User, 
   ShieldCheck, 
   ArrowRight,
-  RefreshCw
+  RefreshCw,
+  Copy,
+  Check
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import SearchableDropdown from "@/components/ui/SearchableDropdown";
@@ -29,6 +31,15 @@ export default function AdminReservationsClient({
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("All");
   const [selectedBranch, setSelectedBranch] = useState("All");
+  const [copiedSku, setCopiedSku] = useState<string | null>(null);
+
+  const handleCopySku = (sku: string) => {
+    if (!sku) return;
+    navigator.clipboard.writeText(sku);
+    setCopiedSku(sku);
+    toast.success(`Copied SKU: ${sku}`);
+    setTimeout(() => setCopiedSku(null), 2000);
+  };
   const [checkingExpiry, setCheckingExpiry] = useState(false);
 
   // Trigger expiry check on demand
@@ -211,21 +222,42 @@ export default function AdminReservationsClient({
             </tr>
           </thead>
           <tbody className="divide-y divide-stone-100">
-            {filteredReservations.map((res) => (
-              <tr key={res.id} className="hover:bg-stone-50/50 transition-colors">
-                <td className="px-6 py-4 font-bold text-stone-900 flex items-center space-x-1.5 mt-0.5">
-                  <User className="w-3.5 h-3.5 text-stone-400" />
-                  <span>{res.user?.name || "Customer"}</span>
-                </td>
-                <td className="px-6 py-4 font-semibold text-stone-850">{res.product?.name || "Product"}</td>
-                <td className="px-6 py-4 font-mono text-stone-500">{res.sku}</td>
-                <td className="px-6 py-4 text-right font-bold text-stone-850">{res.quantity} units</td>
-                <td className="px-6 py-4 text-stone-500 font-medium">
-                  <div className="flex items-center space-x-0.5">
-                    <MapPin className="w-3.5 h-3.5 text-stone-400" />
-                    <span>{res.branchCode}</span>
-                  </div>
-                </td>
+            {filteredReservations.map((res) => {
+              const custName = res.customer?.name || res.customer?.companyLegalName || res.user?.name || "Customer";
+              const skuVal = res.sku || (res.items && res.items[0] ? res.items[0].sku : "");
+              return (
+                <tr key={res.id} className="hover:bg-stone-50/50 transition-colors">
+                  <td className="px-6 py-4 font-bold text-stone-900 flex items-center space-x-1.5 mt-0.5">
+                    <User className="w-3.5 h-3.5 text-stone-400" />
+                    <span>{custName}</span>
+                  </td>
+                  <td className="px-6 py-4 font-semibold text-stone-850">
+                    {res.items && res.items.length > 0
+                      ? res.items.map((i: any) => i.product?.name || i.sku).join(", ")
+                      : res.product?.name || "Product"}
+                  </td>
+                  <td className="px-6 py-4 font-mono text-stone-500">
+                    {skuVal ? (
+                      <span className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-800 border border-amber-200/80 px-2 py-0.5 rounded text-[11px] font-mono font-bold">
+                        <span>{skuVal}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopySku(skuVal)}
+                          className="hover:text-orange-600 transition-colors p-0.5 cursor-pointer"
+                          title="Copy SKU"
+                        >
+                          {copiedSku === skuVal ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                        </button>
+                      </span>
+                    ) : "—"}
+                  </td>
+                  <td className="px-6 py-4 text-right font-bold text-stone-850">{res.quantity} units</td>
+                  <td className="px-6 py-4 text-stone-500 font-medium">
+                    <div className="flex items-center space-x-0.5">
+                      <MapPin className="w-3.5 h-3.5 text-stone-400" />
+                      <span>{res.branchCode}</span>
+                    </div>
+                  </td>
                 <td className="px-6 py-4 text-stone-500">
                   {new Date(res.reservedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
                 </td>
@@ -241,7 +273,8 @@ export default function AdminReservationsClient({
                   </span>
                 </td>
               </tr>
-            ))}
+            );
+          })}
             {filteredReservations.length === 0 && (
               <tr>
                 <td colSpan={9} className="px-6 py-8 text-center text-stone-400 italic">

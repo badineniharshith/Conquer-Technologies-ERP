@@ -31,7 +31,9 @@ import {
   User,
   FileText,
   Edit2,
-  Search
+  Search,
+  Copy,
+  Check
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo } from "react";
@@ -84,6 +86,16 @@ export default function ReservedStockClient({
 
   // PO Details Modal State
   const [selectedPoForModal, setSelectedPoForModal] = useState<string | null>(null);
+  const [copiedSku, setCopiedSku] = useState<string | null>(null);
+
+  const handleCopySku = (sku: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!sku) return;
+    navigator.clipboard.writeText(sku);
+    setCopiedSku(sku);
+    toast.success(`Copied SKU: ${sku}`);
+    setTimeout(() => setCopiedSku(null), 2000);
+  };
 
   const isCustomer = currentUser.role === "CUSTOMER";
 
@@ -620,33 +632,63 @@ export default function ReservedStockClient({
 
                     <div>
                       {res.items && res.items.length > 0 ? (
-                        <div className="space-y-1.5 bg-stone-50 border border-stone-200 rounded-xl p-2.5 max-h-32 overflow-y-auto">
-                          {res.items.map((item: any, idx: number) => (
-                            <div key={idx} className="flex justify-between items-center text-[11px] font-semibold text-stone-850">
-                              <span className="truncate pr-2" title={item.product?.name || item.sku}>
-                                {item.product?.name || item.sku}
-                              </span>
-                              <span className="text-orange-600 font-bold shrink-0 font-mono">{item.quantity} u</span>
-                            </div>
-                          ))}
+                        <div className="space-y-2 bg-stone-50 border border-stone-200 rounded-xl p-2.5 max-h-36 overflow-y-auto">
+                          {res.items.map((item: any, idx: number) => {
+                            const itemSku = item.sku || item.product?.sku || "";
+                            return (
+                              <div key={idx} className="flex justify-between items-center text-[11px] font-semibold text-stone-850 gap-2">
+                                <div className="truncate flex-1">
+                                  <div className="truncate text-stone-900 font-bold" title={item.product?.name || itemSku}>
+                                    {item.product?.name || itemSku}
+                                  </div>
+                                  {itemSku && (
+                                    <div className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 border border-amber-200/80 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold mt-0.5">
+                                      <span>{itemSku}</span>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => handleCopySku(itemSku, e)}
+                                        className="hover:text-orange-600 transition-colors p-0.5 cursor-pointer"
+                                        title="Copy SKU"
+                                      >
+                                        {copiedSku === itemSku ? <Check className="w-2.5 h-2.5 text-emerald-600" /> : <Copy className="w-2.5 h-2.5" />}
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                                <span className="text-orange-600 font-bold shrink-0 font-mono">{item.quantity} u</span>
+                              </div>
+                            );
+                          })}
                         </div>
                       ) : (
                         <>
                           <h4 className="font-bold text-stone-850 text-xs truncate" title={res.product?.name || res.sku}>
                             {res.product?.name || res.sku}
                           </h4>
-                          <span className="text-[10px] text-stone-400 font-mono block mt-0.5">SKU: {res.sku}</span>
+                          {res.sku && (
+                            <div className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 border border-amber-200/80 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold mt-1">
+                              <span>SKU: {res.sku}</span>
+                              <button
+                                type="button"
+                                onClick={(e) => handleCopySku(res.sku, e)}
+                                className="hover:text-orange-600 transition-colors p-0.5 cursor-pointer"
+                                title="Copy SKU"
+                              >
+                                {copiedSku === res.sku ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                              </button>
+                            </div>
+                          )}
                         </>
                       )}
                     </div>
 
                     <div className="space-y-1.5 border-t border-stone-100 pt-2.5 text-xs text-stone-600">
                       {!isCustomer && (
-                        <div className="flex justify-between">
+                        <div className="flex justify-between items-center">
                           <span className="font-medium text-stone-450">Customer:</span>
                           <span className="font-bold text-stone-900 flex items-center gap-1">
                             <User className="w-3.5 h-3.5 text-stone-400" />
-                            {res.user?.name || "N/A"}
+                            {res.customer?.name || res.customer?.companyLegalName || res.user?.name || "N/A"}
                           </span>
                         </div>
                       )}
@@ -660,9 +702,9 @@ export default function ReservedStockClient({
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="font-medium text-stone-450">Branch:</span>
-                        <span className="flex items-center text-[10px] text-stone-500 font-semibold">
+                        <span className="flex items-center text-[10px] text-stone-700 font-bold">
                           <MapPin className="w-3.5 h-3.5 mr-0.5 text-stone-400" />
-                          {res.branchCode}
+                          {branches.find((b: any) => b.id === res.branchCode || b.name === res.branchCode)?.name || res.branchCode}
                         </span>
                       </div>
                       {res.notes && (
@@ -1012,36 +1054,60 @@ export default function ReservedStockClient({
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
-                {inactiveReservations.map((res) => (
-                  <tr key={res.id} className="hover:bg-stone-50/50 transition-colors">
-                    <td className="px-6 py-4 font-mono font-semibold text-stone-500">{res.id}</td>
-                    {!isCustomer && <td className="px-6 py-4 font-bold text-stone-700">{res.user?.name || "N/A"}</td>}
-                    <td className="px-6 py-4 font-semibold text-stone-850">
-                      {res.items && res.items.length > 0
-                        ? res.items.map((item: any) => item.product?.name || item.sku).join(", ")
-                        : res.product?.name || res.sku}
-                    </td>
-                    <td className="px-6 py-4 font-mono text-stone-500 text-[10px]">
-                      {res.items && res.items.length > 0
-                        ? res.items.map((item: any) => item.sku).join(", ")
-                        : res.sku}
-                    </td>
-                    <td className="px-6 py-4 text-right font-bold text-stone-800">
-                      {res.items && res.items.length > 0
-                        ? `${res.items.reduce((sum: number, it: any) => sum + it.quantity, 0)} units`
-                        : `${res.quantity} units`}
-                    </td>
-                    <td className="px-6 py-4 text-stone-500 font-medium">{res.branchCode}</td>
-                    <td className="px-6 py-4 text-stone-500 font-medium">
-                      {new Date(res.reservedAt).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-block text-[9px] font-bold px-2.5 py-0.5 rounded-full border uppercase ${getStatusBadge(res.status)}`}>
-                        {res.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {inactiveReservations.map((res) => {
+                  const branchName = branches.find((b: any) => b.id === res.branchCode || b.name === res.branchCode)?.name || res.branchCode;
+                  const customerDisplayName = res.customer?.name || res.customer?.companyLegalName || res.user?.name || "N/A";
+                  const primarySku = res.sku || (res.items && res.items[0] ? res.items[0].sku : "");
+
+                  return (
+                    <tr key={res.id} className="hover:bg-stone-50/50 transition-colors">
+                      <td className="px-6 py-4 font-mono font-semibold text-stone-600">{res.reservationNumber || res.id}</td>
+                      {!isCustomer && <td className="px-6 py-4 font-bold text-stone-850">{customerDisplayName}</td>}
+                      <td className="px-6 py-4 font-semibold text-stone-850">
+                        {res.items && res.items.length > 0
+                          ? res.items.map((item: any) => item.product?.name || item.sku).join(", ")
+                          : res.product?.name || res.sku}
+                      </td>
+                      <td className="px-6 py-4">
+                        {res.items && res.items.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {res.items.map((item: any, i: number) => (
+                              <span key={i} className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 border border-amber-200/80 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold">
+                                <span>{item.sku}</span>
+                                <button type="button" onClick={(e) => handleCopySku(item.sku, e)} className="hover:text-orange-600 p-0.5 cursor-pointer" title="Copy SKU">
+                                  {copiedSku === item.sku ? <Check className="w-2.5 h-2.5 text-emerald-600" /> : <Copy className="w-2.5 h-2.5" />}
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          primarySku ? (
+                            <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 border border-amber-200/80 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold">
+                              <span>{primarySku}</span>
+                              <button type="button" onClick={(e) => handleCopySku(primarySku, e)} className="hover:text-orange-600 p-0.5 cursor-pointer" title="Copy SKU">
+                                {copiedSku === primarySku ? <Check className="w-2.5 h-2.5 text-emerald-600" /> : <Copy className="w-2.5 h-2.5" />}
+                              </button>
+                            </span>
+                          ) : <span className="text-stone-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-right font-bold text-stone-800">
+                        {res.items && res.items.length > 0
+                          ? `${res.items.reduce((sum: number, it: any) => sum + it.quantity, 0)} units`
+                          : `${res.quantity} units`}
+                      </td>
+                      <td className="px-6 py-4 text-stone-700 font-bold">{branchName}</td>
+                      <td className="px-6 py-4 text-stone-500 font-medium">
+                        {new Date(res.reservedAt).toLocaleDateString()}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-block text-[9px] font-bold px-2.5 py-0.5 rounded-full border uppercase ${getStatusBadge(res.status)}`}>
+                          {res.status}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1079,24 +1145,43 @@ export default function ReservedStockClient({
               {!isCustomer && (
                 <div className="relative">
                   <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-wider mb-1">Select Customer</label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      placeholder="Search by Customer ID, company name, or email..."
-                      value={customerSearch}
-                      onFocus={() => setDropdownOpen(true)}
-                      onChange={(e) => {
-                        setCustomerSearch(e.target.value);
-                        setSelectedCustomerId(""); // Reset if typing
-                        setDropdownOpen(true);
-                      }}
-                      className="w-full px-3 py-2.5 bg-stone-50 border border-stone-250 rounded-xl outline-none focus:border-orange-500 focus:bg-white focus:ring-0 focus:ring-transparent text-stone-800 font-semibold transition-all duration-200 shadow-sm"
-                      required
-                    />
-                    <div className="absolute right-3 top-3 text-stone-400">
-                      <Search className="w-4 h-4" />
+                  {selectedCustomerId ? (
+                    <div className="flex items-center justify-between p-2.5 bg-orange-50/80 border border-orange-200 rounded-xl text-stone-900 font-semibold text-xs shadow-2xs">
+                      <div className="flex items-center space-x-2 truncate">
+                        <User className="w-4 h-4 text-orange-600 shrink-0" />
+                        <span className="truncate font-bold text-stone-850">{customerSearch}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedCustomerId("");
+                          setCustomerSearch("");
+                          setDropdownOpen(true);
+                        }}
+                        className="text-[10px] font-extrabold text-orange-700 hover:text-orange-900 bg-orange-100/80 hover:bg-orange-200 px-2 py-1 rounded-lg shrink-0 transition-colors cursor-pointer"
+                      >
+                        Change Customer
+                      </button>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Search by Customer ID, company name, or email..."
+                        value={customerSearch}
+                        onFocus={() => setDropdownOpen(true)}
+                        onChange={(e) => {
+                          setCustomerSearch(e.target.value);
+                          setDropdownOpen(true);
+                        }}
+                        className="w-full px-3 py-2.5 bg-stone-50 border border-stone-250 rounded-xl outline-none focus:border-orange-500 focus:bg-white text-stone-800 font-semibold transition-all duration-200 shadow-sm"
+                        required
+                      />
+                      <div className="absolute right-3 top-3 text-stone-400">
+                        <Search className="w-4 h-4" />
+                      </div>
+                    </div>
+                  )}
                   
                   {dropdownOpen && (
                     <>
@@ -1111,13 +1196,13 @@ export default function ReservedStockClient({
                               type="button"
                               onClick={() => {
                                 setSelectedCustomerId(c.id);
-                                setCustomerSearch(`${c.customerId || ""} — ${c.companyName || c.name} (${c.email})`);
+                                setCustomerSearch(`${c.customerCode || c.customerId || c.id?.substring(0, 8)} — ${c.companyLegalName || c.companyName || c.name} (${c.email})`);
                                 setDropdownOpen(false);
                               }}
                               className="w-full text-left px-3 py-2.5 hover:bg-stone-50 hover:text-stone-900 text-xs font-semibold transition-colors duration-200"
                             >
-                              <span className="text-[10px] font-mono text-orange-600 font-bold mr-1.5">{c.customerId || "—"}</span>
-                              {c.companyName || c.name} <span className="text-[10px] text-stone-400 font-normal">({c.email})</span>
+                              <span className="text-[10px] font-mono text-orange-600 font-bold mr-1.5">{c.customerCode || c.customerId || "—"}</span>
+                              {c.companyLegalName || c.companyName || c.name} <span className="text-[10px] text-stone-400 font-normal">({c.email})</span>
                             </button>
                           ))
                         )}
@@ -1129,20 +1214,21 @@ export default function ReservedStockClient({
                   {selectedCustomerId && (() => {
                     const sel = customers.find(c => c.id === selectedCustomerId);
                     if (!sel) return null;
+                    const exec = sel.assignedExecutive || sel.assignedEmployee;
                     return (
                       <div className="mt-2 p-3 bg-orange-50/50 border border-orange-100 rounded-xl text-[10px] text-stone-600 space-y-1">
                         <div className="text-[9px] font-black text-orange-600 uppercase tracking-wider mb-1">Auto-Filled Customer Details</div>
                         <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                          <div><span className="font-bold text-stone-400">ID:</span> {sel.customerId || "—"}</div>
-                          <div><span className="font-bold text-stone-400">Company:</span> {sel.companyName || sel.name}</div>
+                          <div><span className="font-bold text-stone-400">ID:</span> {sel.customerCode || sel.customerId || sel.id?.substring(0, 8) || "—"}</div>
+                          <div><span className="font-bold text-stone-400">Company:</span> {sel.companyLegalName || sel.companyName || sel.name}</div>
                           <div><span className="font-bold text-stone-400">GST:</span> {sel.gstNumber || "—"}</div>
                           <div><span className="font-bold text-stone-400">Phone:</span> {sel.phone || "—"}</div>
                           <div><span className="font-bold text-stone-400">Email:</span> {sel.email}</div>
-                          <div><span className="font-bold text-stone-400">Address:</span> {sel.address || "—"}</div>
-                          {sel.assignedEmployee && (
+                          <div><span className="font-bold text-stone-400">Address:</span> {sel.billingAddress || sel.shippingAddress || sel.address || "—"}</div>
+                          {exec && (
                             <>
-                              <div><span className="font-bold text-stone-400">Executive:</span> {sel.assignedEmployee.name}</div>
-                              <div><span className="font-bold text-stone-400">Branch:</span> {sel.assignedEmployee.branchName || "—"}</div>
+                              <div><span className="font-bold text-stone-400">Executive:</span> {exec.name}</div>
+                              <div><span className="font-bold text-stone-400">Executive Email:</span> {exec.email || "—"}</div>
                             </>
                           )}
                         </div>

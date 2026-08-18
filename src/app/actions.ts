@@ -21,10 +21,10 @@ function auditLog(action: string, performedBy: string, targetUser: string, detai
 }
 
 async function getCurrentUserId() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("erp-session-token")?.value;
-  if (!token) return "system";
   try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get("erp-session-token")?.value;
+    if (!token) return "system";
     const payload = await verifyJwt(token);
     return payload ? (payload.id as string) : "system";
   } catch {
@@ -873,6 +873,10 @@ export async function updateProductPriceAction(data: {
 // Helper functions for Database Notifications
 async function createNotification(userId: string, title: string, message: string) {
   try {
+    if (!userId) return;
+    const userExists = await erpDb.users.findUnique({ where: { id: userId } }).catch(() => null);
+    if (!userExists) return;
+
     await erpDb.notifications.create({
       data: {
         userId,
@@ -960,7 +964,8 @@ export async function syncReservationToOpportunity(reservationId: string) {
     });
     if (!reservation) return;
 
-    const user = await erpDb.users.findUnique({ where: { id: reservation.customerId } });
+    let user = await erpDb.users.findUnique({ where: { id: reservation.customerId } }).catch(() => null);
+    let customerRecord = !user ? await prisma.customer.findUnique({ where: { id: reservation.customerId } }).catch(() => null) : null;
     const employee = reservation.employeeId ? await erpDb.users.findUnique({ where: { id: reservation.employeeId } }) : null;
     
     const items = await erpDb.stockReservationItems.findMany({ where: { reservationId: reservation.id } });
@@ -976,8 +981,8 @@ export async function syncReservationToOpportunity(reservationId: string) {
     const data = {
       opportunityNumber: oppNumber,
       customerId: reservation.customerId,
-      customerName: user?.name || "Customer",
-      companyName: user?.companyName || user?.name || "Customer",
+      customerName: customerRecord?.name || user?.name || "Customer",
+      companyName: customerRecord?.companyLegalName || customerRecord?.name || user?.companyName || user?.name || "Customer",
       productDetails: JSON.stringify(productDetailList),
       totalQuantity: totalQuantity || reservation.quantity || 0,
       reservationDate: reservation.reservedAt,
@@ -1032,14 +1037,41 @@ export async function createReservationAction(data: {
     return { error: "Duplicate products are not allowed in the same reservation request." };
   }
 
-  const customerUser = await erpDb.users.findUnique({ where: { id: data.customerId } });
+  let customerUser: any = null;
+  try {
+    customerUser = await erpDb.users.findUnique({ where: { id: data.customerId } });
+  } catch (e) {}
+
+  let customerRecord: any = null;
   if (!customerUser) {
+    try {
+      customerRecord = await prisma.customer.findUnique({ where: { id: data.customerId } });
+    } catch (e) {}
+  }
+
+  if (!customerUser && !customerRecord) {
+    try {
+      customerRecord = await prisma.customer.findFirst({
+        where: {
+          OR: [
+            { email: data.customerId },
+            { customerCode: data.customerId },
+            { name: data.customerId }
+          ]
+        }
+      });
+    } catch (e) {}
+  }
+
+  if (!customerUser && !customerRecord) {
     return { error: "Customer not found." };
   }
 
   let assignedEmployeeId = data.employeeId || null;
   if (customerUser) {
     assignedEmployeeId = customerUser.reportsToId || customerUser.assignedEmployeeId || assignedEmployeeId;
+  } else if (customerRecord) {
+    assignedEmployeeId = customerRecord.assignedExecutiveId || customerRecord.assignedManagerId || assignedEmployeeId;
   }
 
   const allInv = await erpDb.inventory.findMany();
@@ -1102,10 +1134,29 @@ export async function createReservationAction(data: {
       notes: data.notes || "",
       employeeId: assignedEmployeeId,
       reservedAt,
-      expiresAt,
-      draftedAt: initialStatus === "Draft" ? reservedAt : null
+      expiresAt
     }
   });
+
+  // Dual-sync to CRM table crm.stock_reservations for CRM modal visibility
+  try {
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO crm.stock_reservations (
+        reservation_number, branch_code, quantity, status, notes, project, created_at, updated_at, reserved_date, expiry_date
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, NOW(), NOW(), $7, $8
+      ) ON CONFLICT DO NOTHING;
+    `,
+      reservationNumber,
+      data.branchCode || "HYD-HQ",
+      firstItem.quantity || 1,
+      initialStatus === "Draft" ? "DRAFT" : "VERIFIED",
+      data.notes || "Website Reservation",
+      "Website Procurement",
+      reservedAt,
+      expiresAt
+    );
+  } catch (e) {}
 
   for (const item of processedItems) {
     const lockQty = Math.min(item.quantity, item.freeStock);
@@ -1159,10 +1210,11 @@ export async function createReservationAction(data: {
     employeeName = employee?.name || "Employee";
   }
 
+  const resolvedCustomerName = customerRecord?.name || customerRecord?.companyLegalName || customerUser?.name || "Customer";
   await notifyReservationEvent(
     reservation.id,
     initialStatus === "Draft" ? "Reservation Draft Created" : "Reservation Pending Verification",
-    `Reservation ${reservationNumber} for customer ${customerUser?.name || "Customer"} has been created by ${employeeName} (Status: ${initialStatus}).`
+    `Reservation ${reservationNumber} for customer ${resolvedCustomerName} has been created by ${employeeName} (Status: ${initialStatus}).`
   );
 
   const performedBy = await getCurrentUserId();
@@ -1171,9 +1223,11 @@ export async function createReservationAction(data: {
     status: initialStatus
   });
 
-  revalidatePath("/products");
-  revalidatePath("/reserved-stock");
-  revalidatePath("/dashboard");
+  try {
+    revalidatePath("/products");
+    revalidatePath("/reserved-stock");
+    revalidatePath("/dashboard");
+  } catch (e) {}
   return { success: true, reservation };
 }
 
