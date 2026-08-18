@@ -2169,8 +2169,21 @@ export async function checkStockAvailabilityAction(poId: string) {
   let allAvailable = true;
 
   for (const item of items) {
-    const inv = allInventory.find((i: any) => i.sku === item.sku && i.branchCode === po.branchCode);
-    const availableQty = inv ? (inv.availableQty || inv.availableStock || inv.quantity || 0) : 0;
+    const matchingInvs = allInventory.filter((i: any) => i.sku === item.sku);
+    let availableQty = matchingInvs.reduce((sum: number, i: any) => sum + (i.availableStock || i.availableQty || i.quantity || 0), 0);
+
+    if (availableQty === 0 && item.sku) {
+      try {
+        const rawProd: any[] = await prisma.$queryRawUnsafe(
+          `SELECT stock FROM crm.products WHERE sku = $1 LIMIT 1`,
+          item.sku
+        );
+        if (Array.isArray(rawProd) && rawProd.length > 0 && rawProd[0].stock != null) {
+          availableQty = Number(rawProd[0].stock);
+        }
+      } catch (e) {}
+    }
+
     if (availableQty < item.quantity) {
       allAvailable = false;
     }
@@ -2217,8 +2230,22 @@ export async function verifyPurchaseOrderAction(poId: string) {
 
   // Reserve stock for each item (reserving max available if partial)
   for (const item of items) {
-    const inv = allInventory.find((i: any) => i.sku === item.sku && i.branchCode === po.branchCode);
-    const availableQty = inv ? (inv.availableQty || inv.availableStock || inv.quantity || 0) : 0;
+    const inv = allInventory.find((i: any) => i.sku === item.sku);
+    const matchingInvs = allInventory.filter((i: any) => i.sku === item.sku);
+    let availableQty = matchingInvs.reduce((sum: number, i: any) => sum + (i.availableStock || i.availableQty || i.quantity || 0), 0);
+
+    if (availableQty === 0 && item.sku) {
+      try {
+        const rawProd: any[] = await prisma.$queryRawUnsafe(
+          `SELECT stock FROM crm.products WHERE sku = $1 LIMIT 1`,
+          item.sku
+        );
+        if (Array.isArray(rawProd) && rawProd.length > 0 && rawProd[0].stock != null) {
+          availableQty = Number(rawProd[0].stock);
+        }
+      } catch (e) {}
+    }
+
     const reservedAmount = Math.min(availableQty, item.quantity);
 
     if (availableQty < item.quantity) {

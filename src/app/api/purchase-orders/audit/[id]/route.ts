@@ -175,6 +175,20 @@ export async function GET(
           totalAvailable = Number(invSum._sum?.availableStock ?? invSum._sum?.quantity ?? 0);
         }
 
+        // Fallback to crm.products stock if totalAvailable is 0
+        if (totalAvailable === 0) {
+          try {
+            const rawProd: any[] = await prisma.$queryRawUnsafe(
+              `SELECT stock FROM crm.products WHERE sku = $1 OR name ILIKE $2 LIMIT 1`,
+              itemSku || sku,
+              `%${name}%`
+            );
+            if (Array.isArray(rawProd) && rawProd.length > 0 && rawProd[0].stock != null) {
+              totalAvailable = Number(rawProd[0].stock);
+            }
+          } catch (e) {}
+        }
+
         const needToOrder = Math.max(0, requestedQty - totalAvailable);
 
         if (totalAvailable < requestedQty) {
