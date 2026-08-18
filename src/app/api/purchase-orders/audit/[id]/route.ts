@@ -153,40 +153,51 @@ export async function GET(
 
         if (itemSku) {
           const invSum = await prisma.inventory.aggregate({
-            _sum: { availableStock: true, quantity: true },
-            where: { sku: itemSku }
+            _sum: { availableStock: true, availableQty: true, quantity: true },
+            where: {
+              OR: [
+                { sku: itemSku },
+                { sku: { equals: itemSku, mode: "insensitive" } }
+              ]
+            }
           });
-          totalAvailable = Number(invSum._sum?.availableStock ?? invSum._sum?.quantity ?? 0);
+
+          const sStock = Number(invSum._sum?.availableStock || 0);
+          const sQty = Number(invSum._sum?.availableQty || 0);
+          const sTotal = Number(invSum._sum?.quantity || 0);
+          totalAvailable = Math.max(sStock, sQty, sTotal);
+
+          // Fallback to CRM products stock if inventory record is missing or 0
+          if (totalAvailable === 0) {
+            try {
+              const crmP = await prisma.$queryRawUnsafe(
+                "SELECT stock FROM crm.products WHERE sku = $1 OR sku ILIKE $1 LIMIT 1",
+                itemSku
+              );
+              if (Array.isArray(crmP) && crmP.length > 0 && crmP[0].stock) {
+                totalAvailable = Number(crmP[0].stock || 0);
+              }
+            } catch {}
+          }
 
           invFirst = await prisma.inventory.findFirst({
-            where: { sku: itemSku },
+            where: { OR: [ { sku: itemSku }, { sku: { equals: itemSku, mode: "insensitive" } } ] },
             select: { itemName: true }
           });
 
           prodFirst = await prisma.product.findFirst({
-            where: { sku: itemSku },
+            where: { OR: [ { sku: itemSku }, { sku: { equals: itemSku, mode: "insensitive" } } ] },
             select: { name: true, sellingPrice: true, taxPercent: true }
           });
         } else if (name) {
           const invSum = await prisma.inventory.aggregate({
-            _sum: { availableStock: true, quantity: true },
+            _sum: { availableStock: true, availableQty: true, quantity: true },
             where: { itemName: { equals: name, mode: "insensitive" } }
           });
-          totalAvailable = Number(invSum._sum?.availableStock ?? invSum._sum?.quantity ?? 0);
-        }
-
-        // Fallback to crm.products stock if totalAvailable is 0
-        if (totalAvailable === 0) {
-          try {
-            const rawProd: any[] = await prisma.$queryRawUnsafe(
-              `SELECT stock FROM crm.products WHERE sku = $1 OR name ILIKE $2 LIMIT 1`,
-              itemSku || sku,
-              `%${name}%`
-            );
-            if (Array.isArray(rawProd) && rawProd.length > 0 && rawProd[0].stock != null) {
-              totalAvailable = Number(rawProd[0].stock);
-            }
-          } catch (e) {}
+          const sStock = Number(invSum._sum?.availableStock || 0);
+          const sQty = Number(invSum._sum?.availableQty || 0);
+          const sTotal = Number(invSum._sum?.quantity || 0);
+          totalAvailable = Math.max(sStock, sQty, sTotal);
         }
 
         const needToOrder = Math.max(0, requestedQty - totalAvailable);
