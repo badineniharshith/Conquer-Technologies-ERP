@@ -29,11 +29,6 @@ const employeeDemoAccounts = [
   { role: "L2 Ops Manager", email: "sophia.chen@conquererp.com", pass: "Admin@123", badge: "OPS_MANAGER" },
   { role: "L3 Asst. Manager", email: "ananya.sharma@conquererp.com", pass: "Admin@123", badge: "ASST_MGR" },
   { role: "L4 Ops Executive", email: "karan.patel@conquererp.com", pass: "Admin@123", badge: "EXECUTIVE" },
-  { role: "Ops Team 1", email: "operations1@conquererp.com", pass: "Admin@123", badge: "OPS_EXEC" },
-  { role: "Ops Team 2", email: "operations2@conquererp.com", pass: "Admin@123", badge: "OPS_EXEC" },
-  { role: "Ops Team 3", email: "operations3@conquererp.com", pass: "Admin@123", badge: "OPS_EXEC" },
-  { role: "Ops Team 4", email: "operations4@conquererp.com", pass: "Admin@123", badge: "OPS_EXEC" },
-  { role: "Ops Team 5", email: "operations5@conquererp.com", pass: "Admin@123", badge: "OPS_EXEC" },
 ];
 
 const customerDemoAccounts = [
@@ -618,18 +613,6 @@ function LoginCard({
           </AnimatePresence>
         </div>
 
-        {/* Direct CRM Portal Gateway Link */}
-        <div className="pt-2 text-center border-t border-stone-100">
-          <a
-            href="https://conquer-technologies-crm.vercel.app/login"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center space-x-1.5 text-[11px] font-bold text-stone-500 hover:text-orange-700 transition-colors cursor-pointer group"
-          >
-            <span>Sales, Marketing or Customer? Open Conquer CRM</span>
-            <ExternalLink className="w-3 h-3 text-stone-400 group-hover:text-orange-700 transition-colors" />
-          </a>
-        </div>
       </div>
     </motion.div>
   );
