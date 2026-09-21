@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import {
   Lock, Mail, ShieldAlert, Sparkles, ArrowRight,
   Eye, EyeOff, Building2, UserCheck, ChevronDown, ChevronUp,
-  KeyRound, Users, Building
+  KeyRound, Users, Building, ExternalLink
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import logoImg from "../../../public/logo.png";
@@ -29,6 +29,11 @@ const employeeDemoAccounts = [
   { role: "L2 Ops Manager", email: "sophia.chen@conquererp.com", pass: "Admin@123", badge: "OPS_MANAGER" },
   { role: "L3 Asst. Manager", email: "ananya.sharma@conquererp.com", pass: "Admin@123", badge: "ASST_MGR" },
   { role: "L4 Ops Executive", email: "karan.patel@conquererp.com", pass: "Admin@123", badge: "EXECUTIVE" },
+  { role: "Ops Team 1", email: "operations1@conquererp.com", pass: "Admin@123", badge: "OPS_EXEC" },
+  { role: "Ops Team 2", email: "operations2@conquererp.com", pass: "Admin@123", badge: "OPS_EXEC" },
+  { role: "Ops Team 3", email: "operations3@conquererp.com", pass: "Admin@123", badge: "OPS_EXEC" },
+  { role: "Ops Team 4", email: "operations4@conquererp.com", pass: "Admin@123", badge: "OPS_EXEC" },
+  { role: "Ops Team 5", email: "operations5@conquererp.com", pass: "Admin@123", badge: "OPS_EXEC" },
 ];
 
 const customerDemoAccounts = [
@@ -41,6 +46,7 @@ const customerDemoAccounts = [
 export default function LoginPage() {
   const loginSession = useErpStore((state) => state.loginSession);
   const [errorMsg, setErrorMsg] = useState("");
+  const [crmRedirectUrl, setCrmRedirectUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [activeTab, setActiveTab] = useState<"employee" | "customer">("employee");
@@ -61,6 +67,7 @@ export default function LoginPage() {
   const switchTab = (tab: "employee" | "customer") => {
     setActiveTab(tab);
     setErrorMsg("");
+    setCrmRedirectUrl(null);
     setShowDemoAccordion(false);
     reset({ email: "", password: "", rememberMe: false });
   };
@@ -68,6 +75,7 @@ export default function LoginPage() {
   const onSubmit = async (values: LoginFormValues) => {
     setLoading(true);
     setErrorMsg("");
+    setCrmRedirectUrl(null);
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
@@ -81,6 +89,9 @@ export default function LoginPage() {
       const data = await res.json();
       if (!res.ok) {
         setErrorMsg(data.error || "Invalid credentials");
+        if (data.isCrmOnly || data.crmUrl) {
+          setCrmRedirectUrl(data.crmUrl || "https://conquer-technologies-crm.vercel.app/login");
+        }
         toast.error(data.error || "Invalid credentials");
       } else {
         loginSession(data.user as any);
@@ -249,6 +260,7 @@ export default function LoginPage() {
                 <LoginCard
                   activeTab="employee"
                   errorMsg={errorMsg}
+                  crmRedirectUrl={crmRedirectUrl}
                   loading={loading}
                   showPassword={showPassword}
                   setShowPassword={setShowPassword}
@@ -282,6 +294,7 @@ export default function LoginPage() {
                 <LoginCard
                   activeTab="customer"
                   errorMsg={errorMsg}
+                  crmRedirectUrl={crmRedirectUrl}
                   loading={loading}
                   showPassword={showPassword}
                   setShowPassword={setShowPassword}
@@ -355,6 +368,7 @@ export default function LoginPage() {
 function LoginCard({
   activeTab,
   errorMsg,
+  crmRedirectUrl,
   loading,
   showPassword,
   setShowPassword,
@@ -369,6 +383,7 @@ function LoginCard({
 }: {
   activeTab: "employee" | "customer";
   errorMsg: string;
+  crmRedirectUrl?: string | null;
   loading: boolean;
   showPassword: boolean;
   setShowPassword: (v: boolean) => void;
@@ -433,10 +448,25 @@ function LoginCard({
               animate={{ opacity: 1, y: 0, height: "auto" }}
               exit={{ opacity: 0, y: -8, height: 0 }}
               transition={{ duration: 0.25 }}
-              className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-start space-x-2 overflow-hidden"
+              className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex flex-col space-y-2 overflow-hidden"
             >
-              <ShieldAlert className="w-4 h-4 mt-0.5 shrink-0 text-red-500" />
-              <span className="font-medium">{errorMsg}</span>
+              <div className="flex items-start space-x-2">
+                <ShieldAlert className="w-4 h-4 mt-0.5 shrink-0 text-red-500" />
+                <span className="font-medium leading-relaxed">{errorMsg}</span>
+              </div>
+              {crmRedirectUrl && (
+                <div className="pt-1">
+                  <a
+                    href={crmRedirectUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-[#8c3120] text-white text-[11px] font-bold rounded-lg hover:bg-[#722718] transition-colors shadow-xs cursor-pointer"
+                  >
+                    <span>Launch Conquer CRM Website</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
@@ -586,6 +616,19 @@ function LoginCard({
               </motion.div>
             )}
           </AnimatePresence>
+        </div>
+
+        {/* Direct CRM Portal Gateway Link */}
+        <div className="pt-2 text-center border-t border-stone-100">
+          <a
+            href="https://conquer-technologies-crm.vercel.app/login"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center space-x-1.5 text-[11px] font-bold text-stone-500 hover:text-orange-700 transition-colors cursor-pointer group"
+          >
+            <span>Sales, Marketing or Customer? Open Conquer CRM</span>
+            <ExternalLink className="w-3 h-3 text-stone-400 group-hover:text-orange-700 transition-colors" />
+          </a>
         </div>
       </div>
     </motion.div>

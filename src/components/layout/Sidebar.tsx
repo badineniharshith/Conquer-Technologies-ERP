@@ -40,6 +40,7 @@ export const getMenuItems = (role: UserRole): MenuItem[] => {
     { title: "Products Catalog", href: "/products", icon: PlusCircle },
     { title: "Categories", href: "/categories", icon: FolderOpen },
     { title: "Price History", href: "/price-history", icon: TrendingUp },
+    { title: "Stock Availability", href: "/stock-availability", icon: Boxes },
     { title: "Stock Movement", href: "/stock-movement", icon: ArrowUpDown },
     { title: "Analytics", href: "/analytics", icon: BarChart3 },
     { title: "Stock Reservations", href: "/reserved-stock", icon: Boxes },
@@ -53,6 +54,7 @@ export const getMenuItems = (role: UserRole): MenuItem[] => {
   const salesMenu: MenuItem[] = [
     { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { title: "Customers Master", href: "/customers", icon: Users },
+    { title: "Stock Availability", href: "/stock-availability", icon: Boxes },
     { title: "Org Hierarchy", href: "/settings/hierarchy", icon: Target },
     { title: "Logout", href: "/logout", icon: LogOut },
   ];
@@ -63,6 +65,7 @@ export const getMenuItems = (role: UserRole): MenuItem[] => {
     { title: "Products Catalog", href: "/products", icon: PlusCircle },
     { title: "Categories", href: "/categories", icon: FolderOpen },
     { title: "Price History", href: "/price-history", icon: TrendingUp },
+    { title: "Stock Availability", href: "/stock-availability", icon: Boxes },
     { title: "Stock Movement", href: "/stock-movement", icon: ArrowUpDown },
     { title: "Analytics", href: "/analytics", icon: BarChart3 },
     { title: "Stock Reservations", href: "/reserved-stock", icon: Boxes },

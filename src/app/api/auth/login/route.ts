@@ -21,26 +21,17 @@ export async function POST(req: NextRequest) {
 
     const result = await authenticateUserAction(email, password);
     if (result && result.error) {
+      if ((result as any).isCrmOnly) {
+        return NextResponse.json(
+          {
+            error: result.error,
+            isCrmOnly: true,
+            crmUrl: "https://conquer-technologies-crm.vercel.app/login"
+          },
+          { status: 403 }
+        );
+      }
       return NextResponse.json({ error: result.error }, { status: 401 });
-    }
-
-    const userRole: string = result.user?.role || "";
-
-    // Portal-type enforcement
-    if (portalType === "customer") {
-      if (!CUSTOMER_ROLES.includes(userRole)) {
-        return NextResponse.json(
-          { error: "This account is not a customer account. Please use the Employee Portal to login." },
-          { status: 403 }
-        );
-      }
-    } else if (portalType === "employee") {
-      if (CUSTOMER_ROLES.includes(userRole)) {
-        return NextResponse.json(
-          { error: "Customer accounts cannot access the Employee Portal. Please use the Customer Portal instead." },
-          { status: 403 }
-        );
-      }
     }
 
     return NextResponse.json({ success: true, user: result.user });

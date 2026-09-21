@@ -122,18 +122,31 @@ export default async function ProductsPage({ searchParams }: PageProps) {
     );
   }
 
+  // Fetch live inventory for branch breakdown
+  const inventories = await prisma.inventory.findMany({
+    select: {
+      sku: true,
+      branchCode: true,
+      branchId: true,
+      quantity: true,
+      reservedQty: true,
+      availableQty: true
+    }
+  });
+
   const itemsPerPage = 50;
   const totalFilteredCount = allProducts.length;
   const paginatedProducts = allProducts.slice((page - 1) * itemsPerPage, page * itemsPerPage);
 
   const serializedProducts = serializeData<any[]>(paginatedProducts);
   const serializedCategories = serializeData<any[]>(categories);
+  const serializedInventory = serializeData<any[]>(inventories);
 
   return (
     <ProductMasterClient
       products={serializedProducts}
       categories={serializedCategories}
-      inventory={[]}
+      inventory={serializedInventory}
       prices={[]}
       predictions={[]}
       searchQueryString={q}

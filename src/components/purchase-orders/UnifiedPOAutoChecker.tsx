@@ -144,38 +144,55 @@ export default function UnifiedPOAutoChecker({
       </div>
 
       {/* Real-time Inventory Verification Banner */}
+      {/* Real-time Inventory Verification Banner */}
       <motion.div 
         initial={{ scale: 0.98, opacity: 0.8 }}
         animate={{ scale: 1, opacity: 1 }}
         className={`p-4 rounded-xl flex items-center justify-between border ${
-          poMetrics.isStockAvailable 
+          poMetrics.stockStatus === "Stock Adjusted"
+            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-900'
+            : poMetrics.isStockAvailable 
             ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-800' 
+            : poMetrics.stockStatus === "Partially Stock Adjusted"
+            ? 'bg-amber-500/10 border-amber-500/20 text-amber-800'
             : 'bg-rose-500/10 border-rose-500/20 text-rose-800'
         }`}
       >
         <div className="flex items-center space-x-2.5">
-          {poMetrics.isStockAvailable ? (
+          {poMetrics.stockStatus === "Stock Adjusted" || poMetrics.isStockAvailable ? (
             <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
           ) : (
-            <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 animate-pulse" />
+            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 animate-pulse" />
           )}
           <div className="text-xs">
             <div className="font-extrabold">
-              {poMetrics.isStockAvailable ? "Stock Fulfillability Verified" : "Inventory Shortage Detected"}
+              {poMetrics.stockStatus === "Stock Adjusted" 
+                ? "Stock Adjusted & Fulfillable" 
+                : poMetrics.isStockAvailable 
+                ? "Stock Fulfillability Verified" 
+                : poMetrics.stockStatus === "Partially Stock Adjusted"
+                ? "Stock Partially Adjusted"
+                : "Inventory Shortage Detected"}
             </div>
-            <div className="text-[10px] opacity-80 mt-0.5">
-              {poMetrics.isStockAvailable 
+            <div className="text-[10px] opacity-85 mt-0.5">
+              {poMetrics.stockStatus === "Stock Adjusted"
+                ? `Covered by stock adjustment ${poMetrics.lastAdjustmentNumber || ''} on ${poMetrics.lastAdjustedAt ? new Date(poMetrics.lastAdjustedAt).toLocaleString("en-IN") : ''}`
+                : poMetrics.isStockAvailable 
                 ? "All requested item lines are fully stocked in destination branch." 
+                : poMetrics.stockStatus === "Partially Stock Adjusted"
+                ? `${poMetrics.totalAllocated || 0}/${poMetrics.totalRequested || 0} units fulfilled (${poMetrics.totalRemaining || 0} units remaining)`
                 : "One or more item lines exceed available stock at warehouse."}
             </div>
           </div>
         </div>
         <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded border ${
-          poMetrics.isStockAvailable 
+          poMetrics.stockStatus === "Stock Adjusted" || poMetrics.isStockAvailable
             ? 'bg-emerald-600 text-white border-emerald-600' 
+            : poMetrics.stockStatus === "Partially Stock Adjusted"
+            ? 'bg-amber-600 text-white border-amber-600'
             : 'bg-rose-600 text-white border-rose-600'
         }`}>
-          {poMetrics.isStockAvailable ? "Fulfillable" : "Shortage"}
+          {poMetrics.stockStatus || (poMetrics.isStockAvailable ? "Fulfillable" : "Shortage")}
         </span>
       </motion.div>
 
@@ -184,12 +201,14 @@ export default function UnifiedPOAutoChecker({
         <h4 className="text-[10px] font-bold uppercase text-stone-400 tracking-wider">Item Allocation Matrix</h4>
         <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
           {poMetrics.lineItems?.map((productLine: any, index: number) => {
-            const hasSufficient = productLine.currentStock >= productLine.requestedQty;
+            const isCovered = productLine.status === "STOCK_ADJUSTED" || (productLine.currentStock >= productLine.requestedQty);
             return (
               <div 
                 key={index} 
                 className={`flex justify-between items-center text-xs p-3 rounded-lg border ${
-                  hasSufficient 
+                  productLine.status === "STOCK_ADJUSTED"
+                    ? 'bg-emerald-50/50 border-emerald-200'
+                    : isCovered 
                     ? 'bg-white border-stone-200' 
                     : 'bg-rose-50/30 border-rose-200/50'
                 }`}
@@ -197,14 +216,19 @@ export default function UnifiedPOAutoChecker({
                 <div className="space-y-0.5">
                   <div className="font-bold text-stone-800">{productLine.name || productLine.sku}</div>
                   <div className="text-[10px] text-stone-400 font-mono">SKU: {productLine.sku}</div>
+                  {productLine.lastAdjustmentNumber && (
+                    <div className="text-[9px] font-mono text-emerald-700 font-bold">
+                      Adj: {productLine.lastAdjustmentNumber}
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center space-x-3 text-right">
                   <div className="text-[10px] text-stone-500 font-medium">
                     <div>Ordered: <strong className="text-stone-850 font-bold">{productLine.requestedQty}</strong></div>
-                    <div>Stock: <strong className={hasSufficient ? "text-emerald-600 font-bold" : "text-rose-600 font-bold"}>{productLine.currentStock}</strong></div>
+                    <div>Stock / Allocated: <strong className={isCovered ? "text-emerald-600 font-bold" : "text-rose-600 font-bold"}>{productLine.allocatedQty || productLine.currentStock}</strong></div>
                   </div>
                   <div className="shrink-0">
-                    {hasSufficient ? (
+                    {isCovered ? (
                       <span className="w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 text-[10px] font-bold">✓</span>
                     ) : (
                       <span className="w-5 h-5 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 text-[10px] font-bold">⚠</span>

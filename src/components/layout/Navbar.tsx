@@ -138,9 +138,9 @@ export default function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
 
       {/* Right Actions */}
       <div className="flex items-center space-x-2 sm:space-x-3 ml-4">
-        {/* Visit CRM Pill Button */}
+        {/* Visit CRM Pill Button — Direct to Login Page */}
         <a
-          href="https://conquer-crm.onrender.com/"
+          href="https://conquer-technologies-crm.vercel.app/login"
           target="_blank"
           rel="noopener noreferrer"
           className="hidden md:inline-flex items-center space-x-1.5 px-4 py-1.5 bg-[#8c3120] text-white text-xs font-bold rounded-full shadow-2xs hover:bg-[#a03828] transition-all cursor-pointer"
@@ -311,6 +311,26 @@ export default function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
                       <span className="text-[10px] text-stone-400 font-normal">System preferences &amp; permissions</span>
                     </div>
                   </Link>
+
+                  {/* 4. Go to CRM Website — Direct Link */}
+                  <a
+                    href="https://conquer-technologies-crm.vercel.app/login"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setProfileDropdownOpen(false)}
+                    className="flex items-center justify-between px-3 py-2 rounded-xl bg-orange-50/80 hover:bg-orange-100/90 border border-orange-200/70 text-orange-900 transition-colors group cursor-pointer"
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      <div className="w-6 h-6 rounded-lg bg-orange-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <Building className="w-3.5 h-3.5" />
+                      </div>
+                      <div>
+                        <span className="block font-bold text-stone-900 group-hover:text-orange-700">Go to CRM Website</span>
+                        <span className="text-[10px] text-stone-500 font-normal">Access the CRM login portal</span>
+                      </div>
+                    </div>
+                    <ExternalLink className="w-3.5 h-3.5 text-stone-400 group-hover:text-orange-600 shrink-0 transition-colors" />
+                  </a>
                 </div>
 
                 {/* Logout Button */}

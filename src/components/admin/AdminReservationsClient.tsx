@@ -76,6 +76,7 @@ export default function AdminReservationsClient({
         customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         res.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (res.reservationNumber || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
         res.id.toLowerCase().includes(searchQuery.toLowerCase());
 
       let matchesStatus = false;
@@ -210,6 +211,7 @@ export default function AdminReservationsClient({
         <table className="w-full text-xs text-left border-collapse">
           <thead>
             <tr className="bg-stone-50 text-stone-500 font-semibold uppercase tracking-wider border-b border-stone-200">
+              <th className="px-6 py-3">Reservation #</th>
               <th className="px-6 py-3">Customer Name</th>
               <th className="px-6 py-3">Product Specifications</th>
               <th className="px-6 py-3">SKU</th>
@@ -227,6 +229,23 @@ export default function AdminReservationsClient({
               const skuVal = res.sku || (res.items && res.items[0] ? res.items[0].sku : "");
               return (
                 <tr key={res.id} className="hover:bg-stone-50/50 transition-colors">
+                  <td className="px-6 py-4 font-mono font-bold text-stone-850">
+                    <span className="inline-flex items-center gap-1.5 bg-orange-50 text-orange-950 border border-orange-200/90 px-2 py-0.5 rounded-lg text-xs font-mono font-bold tracking-tight">
+                      <span>{res.reservationNumber || res.id}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopySku(res.reservationNumber || res.id)}
+                        className="text-stone-400 hover:text-orange-600 transition-colors p-0.5 cursor-pointer"
+                        title="Copy Reservation Number"
+                      >
+                        {copiedSku === (res.reservationNumber || res.id) ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    </span>
+                  </td>
                   <td className="px-6 py-4 font-bold text-stone-900 flex items-center space-x-1.5 mt-0.5">
                     <User className="w-3.5 h-3.5 text-stone-400" />
                     <span>{custName}</span>

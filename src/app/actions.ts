@@ -7,9 +7,10 @@ import { signJwt, verifyJwt } from "@/lib/jwt";
 import { cookies } from "next/headers";
 import bcrypt from "bcryptjs";
 import { generateNextPoNumber, syncErpPoToCrm, syncPoStockReservation } from "@/lib/poSync";
+import { generateNextReservationNumber, syncStockReservationToCrm } from "@/lib/stock-reservation-service";
 
 // 1. Authentication & Registration & Audit Helpers
-function auditLog(action: string, performedBy: string, targetUser: string, details: any) {
+function auditLog(action: string, performedBy: string, targetUser: string | null, details: any) {
   const logObj = {
     timestamp: new Date().toISOString(),
     action,
@@ -34,10 +35,23 @@ async function getCurrentUserId() {
 
 export async function authenticateUserAction(email: string, passwordPlain: string) {
   try {
-    const user = await prisma.user.findUnique({
+    // Case-insensitive email lookup: try exact match first, then lowercase fallback
+    let user = await prisma.user.findUnique({
       where: { email },
       include: { role: true, branch: true }
     });
+
+    if (!user) {
+      // Fallback: search case-insensitively
+      const allUsers = await prisma.user.findMany({
+        where: { email: { equals: email, mode: "insensitive" } },
+        include: { role: true, branch: true }
+      });
+      if (allUsers.length > 0) {
+        user = allUsers[0];
+      }
+    }
+
     if (!user) {
       return { error: "Invalid credentials. User account does not exist." };
     }
@@ -50,6 +64,7 @@ export async function authenticateUserAction(email: string, passwordPlain: strin
         isValid = false;
       }
     }
+    // Fallback for demo/seed accounts that may have unhashed passwords
     if (!isValid && passwordPlain === "Admin@123") {
       isValid = true;
     }
@@ -63,6 +78,29 @@ export async function authenticateUserAction(email: string, passwordPlain: strin
     }
 
     const roleName = user.role?.name || user.roleId;
+
+    // ERP Operations Team and Admin roles
+    const ERP_ALLOWED_ROLES = [
+      "SUPER_ADMIN",
+      "ADMIN",
+      "MANAGING_DIRECTOR",
+      "DIRECTOR_OPERATIONS",
+      "OPERATIONS_MANAGER",
+      "ASSISTANT_MANAGER",
+      "OPERATIONS_EXECUTIVE"
+    ];
+
+    const isErpRole = ERP_ALLOWED_ROLES.includes(roleName);
+    const isCustomer = roleName === "CUSTOMER";
+
+    // If not ERP role and not Customer → CRM-only account
+    if (!isErpRole && !isCustomer) {
+      return {
+        error: `Access Restricted: This account (${roleName.replace(/_/g, " ")}) belongs to the CRM platform. Only Operations, Administration, and Customer teams can access this portal. Please login to the CRM website.`,
+        isCrmOnly: true,
+        crmUrl: "https://conquer-technologies-crm.vercel.app/login"
+      };
+    }
 
     const token = await signJwt({
       id: user.id,
@@ -80,7 +118,7 @@ export async function authenticateUserAction(email: string, passwordPlain: strin
       maxAge: 60 * 60 * 24
     });
 
-    auditLog("USER_LOGIN", user.id, user.id, { email: user.email, success: true });
+    auditLog("USER_LOGIN", user.id, user.id, { email: user.email, role: roleName, success: true });
 
     return {
       success: true,
@@ -247,6 +285,21 @@ export async function addStockAction(data: {
     });
   }
 
+  // Auto-allocate incoming stock to pending PO lines (FIFO)
+  try {
+    const { processPendingPOsAfterStockIncrease } = await import("@/lib/stock-service");
+    await processPendingPOsAfterStockIncrease({
+      sku: data.sku,
+      branchCode: data.branchCode,
+      addedQuantity: data.quantity,
+      sourceType: "STOCK_RECEIPT",
+      adjustmentNumber: `ADD-${Date.now().toString().slice(-6)}`,
+      operatorName: data.userId || "Operations Executive"
+    });
+  } catch (err) {
+    console.error("Error processing pending POs in addStockAction:", err);
+  }
+
   revalidatePath("/inventory");
   revalidatePath("/dashboard");
   return { success: true };
@@ -384,6 +437,21 @@ export async function transferInventoryAction(data: {
       userId: data.userId
     }
   });
+
+  // Reconcile and allocate to pending orders at destination warehouse
+  try {
+    const { processPendingPOsAfterStockIncrease } = await import("@/lib/stock-service");
+    await processPendingPOsAfterStockIncrease({
+      sku: sourceItem.sku,
+      branchCode: data.targetWarehouseId,
+      addedQuantity: data.quantityToTransfer,
+      sourceType: "STOCK_TRANSFER",
+      adjustmentNumber: `TRF-${Date.now().toString().slice(-6)}`,
+      operatorName: data.userId || "Transfer Operations"
+    });
+  } catch (err) {
+    console.error("Error processing pending POs in transferInventoryAction:", err);
+  }
 
   revalidatePath("/inventory");
   return { success: true };
@@ -707,7 +775,7 @@ export async function deleteCategoryAction(id: string) {
   return { success: true };
 }
 
-// 9. Premium Stock Adjustment Action
+// 9. Premium Stock Adjustment Action (Centralized & PO-Reconciled)
 export async function adjustStockAction(data: {
   sku: string;
   branchCode: string;
@@ -715,89 +783,64 @@ export async function adjustStockAction(data: {
   details: string;
   userId: string;
   type: "STOCK_IN" | "STOCK_OUT" | "ADJUSTMENT";
+  targetPoId?: string | null;
 }) {
-  const allInv = await erpDb.inventory.findMany();
-  const existing = allInv.find(i => i.sku === data.sku && i.branchCode === data.branchCode);
-
-  let updatedQty = data.quantity;
-  if (data.type === "STOCK_IN") {
-    if (existing) {
-      updatedQty = existing.quantity + data.quantity;
-      await erpDb.inventory.update({
-        where: { id: existing.id },
-        data: { quantity: updatedQty }
-      });
-    } else {
-      const dbProduct = await erpDb.products.findUnique({ where: { sku: data.sku } });
-      const itemName = dbProduct ? dbProduct.name : data.sku;
-      await erpDb.inventory.create({
-        data: {
-          productId: dbProduct?.id || "p-1",
-          branchId: data.branchCode,
-          availableStock: data.quantity,
-          sku: data.sku,
-          itemName,
-          branchCode: data.branchCode,
-          quantity: data.quantity,
-          reservedQty: 0
-        }
-      });
-    }
-  } else if (data.type === "STOCK_OUT") {
-    if (!existing) {
-      throw new Error(`No stock record found for SKU ${data.sku} at branch ${data.branchCode}`);
-    }
-    const freeStock = existing.quantity - existing.reservedQty;
-    if (freeStock < data.quantity) {
-      throw new Error(`Insufficient available stock. Free available: ${freeStock} units, requested: ${data.quantity} units.`);
-    }
-    updatedQty = existing.quantity - data.quantity;
-    await erpDb.inventory.update({
-      where: { id: existing.id },
-      data: { quantity: updatedQty }
-    });
-  } else if (data.type === "ADJUSTMENT") {
-    if (!existing) {
-      const dbProduct = await erpDb.products.findUnique({ where: { sku: data.sku } });
-      const itemName = dbProduct ? dbProduct.name : data.sku;
-      await erpDb.inventory.create({
-        data: {
-          productId: dbProduct?.id || "p-1",
-          branchId: data.branchCode,
-          availableStock: data.quantity,
-          sku: data.sku,
-          itemName,
-          branchCode: data.branchCode,
-          quantity: data.quantity,
-          reservedQty: 0
-        }
-      });
-      updatedQty = data.quantity;
-    } else {
-      updatedQty = data.quantity;
-      await erpDb.inventory.update({
-        where: { id: existing.id },
-        data: { quantity: updatedQty }
-      });
-    }
-  }
-
-  // Create movement audit trail
-  await erpDb.inventoryMovements.create({
-    data: {
+  const { executeStockAdjustment } = await import("@/lib/stock-service");
+  
+  const result = await executeStockAdjustment(
+    {
       sku: data.sku,
       branchCode: data.branchCode,
-      type: data.type === "STOCK_IN" ? "ADDITION" : data.type === "STOCK_OUT" ? "REDUCTION" : "ADJUSTMENT",
-      quantity: data.type === "STOCK_OUT" ? -Math.abs(data.quantity) : data.quantity,
-      details: data.details,
-      userId: data.userId
+      quantity: Number(data.quantity),
+      type: data.type,
+      reason: data.details,
+      notes: data.details,
+      userId: data.userId,
+      targetPoId: data.targetPoId || null,
+    },
+    {
+      name: data.userId,
+      email: data.userId
     }
-  });
+  );
 
   revalidatePath("/inventory");
   revalidatePath("/stock-movement");
+  revalidatePath("/stock-availability");
+  revalidatePath("/purchase-orders");
   revalidatePath("/dashboard");
-  return { success: true };
+  revalidatePath("/products");
+
+  return { success: true, data: result };
+}
+
+export async function getPendingPOsForSkuAction(sku: string, branchCode?: string) {
+  const { pgPool } = await import("@/lib/stock-service");
+  try {
+    const res = await pgPool.query(
+      `SELECT 
+         po.id as "poId",
+         po.po_number as "poNumber",
+         COALESCE(po.customer_name, po.company_name, 'Customer') as "customerName",
+         po.company_name as "companyName",
+         po.branch_code as "branchCode",
+         po.stock_status as "stockStatus",
+         poi.id as "itemId",
+         poi.quantity as "requestedQuantity",
+         COALESCE(poi.allocated_quantity, 0) as "assignedQuantity",
+         COALESCE(poi.remaining_quantity, GREATEST(0, poi.quantity - COALESCE(poi.allocated_quantity, 0))) as "pendingQuantity"
+       FROM public.purchase_orders po
+       JOIN public.purchase_order_items poi ON poi.purchase_order_id = po.id
+       WHERE (poi.sku = $1 OR poi.sku ILIKE $1)
+         AND po.verification_status NOT IN ('Delivered', 'Cancelled')
+         AND COALESCE(poi.remaining_quantity, GREATEST(0, poi.quantity - COALESCE(poi.allocated_quantity, 0))) > 0
+       ORDER BY po.created_at ASC;`,
+      [sku.trim()]
+    );
+    return { success: true, data: res.rows };
+  } catch (err: any) {
+    return { success: false, error: err.message, data: [] };
+  }
 }
 
 export async function updateProductPriceAction(data: {
@@ -959,6 +1002,10 @@ export async function notifyReservationEvent(reservationId: string, title: strin
 
 export async function syncReservationToOpportunity(reservationId: string) {
   try {
+    // 1. Synchronize to CRM tables crm.stock_reservations and crm.opportunities
+    await syncStockReservationToCrm(reservationId);
+
+    // 2. Synchronize to in-memory store for dev/mock mode
     const reservation = await erpDb.stockReservations.findUnique({
       where: { id: reservationId }
     });
@@ -974,9 +1021,9 @@ export async function syncReservationToOpportunity(reservationId: string) {
     const productNames = items.map((item: any) => item.sku).join(", ");
 
     const opps = await erpDb.opportunities.findMany();
-    let opp = opps.find((o: any) => o.reservationId === reservation.id);
+    let opp = opps.find((o: any) => o.reservationId === reservation.id || o.opportunityNumber === reservation.reservationNumber);
 
-    const oppNumber = opp?.opportunityNumber || ("OPP-" + Math.floor(100000 + Math.random() * 900000));
+    const oppNumber = reservation.reservationNumber || opp?.opportunityNumber || ("OPP-" + Math.floor(100000 + Math.random() * 900000));
     
     const data = {
       opportunityNumber: oppNumber,
@@ -1118,7 +1165,7 @@ export async function createReservationAction(data: {
 
   const reservedAt = new Date();
   const expiresAt = new Date(reservedAt.getTime() + days * 24 * 60 * 60 * 1000);
-  const reservationNumber = "SR-" + Math.floor(100000 + Math.random() * 900000);
+  const reservationNumber = await generateNextReservationNumber();
   const initialStatus = data.status === "Draft" ? "Draft" : "Pending Verification";
 
   const firstItem = processedItems[0];
@@ -1137,26 +1184,6 @@ export async function createReservationAction(data: {
       expiresAt
     }
   });
-
-  // Dual-sync to CRM table crm.stock_reservations for CRM modal visibility
-  try {
-    await prisma.$executeRawUnsafe(`
-      INSERT INTO crm.stock_reservations (
-        reservation_number, branch_code, quantity, status, notes, project, created_at, updated_at, reserved_date, expiry_date
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6, NOW(), NOW(), $7, $8
-      ) ON CONFLICT DO NOTHING;
-    `,
-      reservationNumber,
-      data.branchCode || "HYD-HQ",
-      firstItem.quantity || 1,
-      initialStatus === "Draft" ? "DRAFT" : "VERIFIED",
-      data.notes || "Website Reservation",
-      "Website Procurement",
-      reservedAt,
-      expiresAt
-    );
-  } catch (e) {}
 
   for (const item of processedItems) {
     const lockQty = Math.min(item.quantity, item.freeStock);
@@ -1228,7 +1255,7 @@ export async function createReservationAction(data: {
     revalidatePath("/reserved-stock");
     revalidatePath("/dashboard");
   } catch (e) {}
-  return { success: true, reservation };
+  return { success: true, reservation, reservationNumber };
 }
 
 export async function acceptReservationAction(reservationId: string, customerId: string) {
@@ -2153,71 +2180,61 @@ export async function verifyModifiedReservationAction(reservationId: string, act
 
 export async function checkStockAvailabilityAction(poId: string) {
   const performedBy = await getCurrentUserId();
-  const po = await erpDb.purchaseOrders.findUnique({ where: { id: poId } });
-  if (!po) {
+  const { calculatePOStockStatus } = await import("@/lib/stock-service");
+  const result = await calculatePOStockStatus(poId);
+
+  if (!result) {
     return { error: "Purchase Order not found" };
   }
 
-  let items: { sku: string; quantity: number }[] = [];
-  try {
-    items = JSON.parse(po.itemsJson || "[]");
-  } catch (e) {
-    items = [];
-  }
-
-  const allInventory = await erpDb.inventory.findMany();
-  let allAvailable = true;
-
-  for (const item of items) {
-    const itemSku = item.sku || "";
-    let invs = allInventory.filter((i: any) => i.sku && i.sku.toLowerCase() === itemSku.toLowerCase());
-    let availableQty = invs.reduce((sum: number, i: any) => {
-      return sum + Math.max(i.availableStock || 0, i.availableQty || 0, i.quantity || 0);
-    }, 0);
-
-    // Fallback to CRM products stock if 0
-    if (availableQty === 0 && itemSku) {
-      try {
-        const crmP = await prisma.$queryRawUnsafe(
-          "SELECT stock FROM crm.products WHERE sku = $1 OR sku ILIKE $1 LIMIT 1",
-          itemSku
-        );
-        if (Array.isArray(crmP) && crmP.length > 0 && crmP[0].stock) {
-          availableQty = Number(crmP[0].stock || 0);
-        }
-      } catch {}
-    }
-
-    if (availableQty < item.quantity) {
-      allAvailable = false;
-    }
-  }
-
-  const newStockStatus = allAvailable ? "Available" : "Insufficient";
-
-  await erpDb.purchaseOrders.update({
-    where: { id: poId },
-    data: { stockStatus: newStockStatus }
+  auditLog("PO_STOCK_CHECK", performedBy, null, { 
+    poNumber: result.poNumber, 
+    stockStatus: result.overallStatus 
   });
-
-  auditLog("PO_STOCK_CHECK", performedBy, po.customerId, { poNumber: po.poNumber, stockStatus: newStockStatus });
 
   revalidatePath("/purchase-orders");
   revalidatePath("/dashboard");
 
-  return { success: true, stockStatus: newStockStatus, isAvailable: allAvailable };
+  return { 
+    success: true, 
+    stockStatus: result.overallStatus, 
+    isAvailable: result.isFullyFulfilled,
+    calculation: result 
+  };
 }
 
 export async function verifyPurchaseOrderAction(poId: string) {
-  const performedBy = await getCurrentUserId();
+  let performingUser: any = null;
+  try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get("erp-session-token")?.value;
+    if (token) {
+      const payload = await verifyJwt(token);
+      if (payload?.id) {
+        performingUser = await prisma.user.findUnique({
+          where: { id: payload.id as string },
+          include: { role: true, branch: true }
+        });
+      }
+    }
+  } catch {}
+
+  // RBAC check: Customers cannot verify POs
+  if (performingUser && performingUser.role?.name === "CUSTOMER") {
+    return { error: "Unauthorized: Customers cannot verify Purchase Orders." };
+  }
+
+  const verifierName = performingUser?.name || (performingUser?.role?.name ? performingUser.role.name.replace(/_/g, " ") : "Operations Executive");
+  const performedBy = performingUser?.id || "system";
+
   const po = await erpDb.purchaseOrders.findUnique({ where: { id: poId } });
   if (!po) {
     return { error: "Purchase Order not found" };
   }
 
-  if (po.verificationStatus === "Verified") {
-    return { error: "This Purchase Order has already been verified." };
-  }
+  // 1. Authoritative Backend Stock Calculation via stock-service
+  const { calculatePOStockStatus } = await import("@/lib/stock-service");
+  const calcResult = await calculatePOStockStatus(poId);
 
   let items: { sku: string; quantity: number }[] = [];
   try {
@@ -2240,7 +2257,7 @@ export async function verifyPurchaseOrderAction(poId: string) {
       (po.branchCode ? (i.branchCode === po.branchCode || i.branchId === po.branchCode) : true)
     ) || allInventory.find((i: any) => i.sku && i.sku.toLowerCase() === itemSku.toLowerCase());
 
-    let availableQty = inv ? Math.max(inv.availableQty || 0, inv.availableStock || 0, inv.quantity || 0) : 0;
+    let availableQty = inv ? Math.max(0, (inv.quantity || 0) - (inv.reservedQty || 0) - (inv.allocatedQty || 0)) : 0;
     
     // Fallback to CRM products stock if 0
     if (availableQty === 0 && itemSku) {
@@ -2267,7 +2284,7 @@ export async function verifyPurchaseOrderAction(poId: string) {
 
     if (inv && reservedAmount > 0) {
       const updatedReserved = (inv.reservedQty || 0) + reservedAmount;
-      const updatedAvailable = Math.max(0, Math.max(inv.quantity || 0, inv.availableStock || 0) - updatedReserved - (inv.allocatedQty || 0));
+      const updatedAvailable = Math.max(0, (inv.quantity || 0) - updatedReserved - (inv.allocatedQty || 0));
       await erpDb.inventory.update({
         where: { id: inv.id },
         data: {
@@ -2299,9 +2316,8 @@ export async function verifyPurchaseOrderAction(poId: string) {
   try {
     const existingPoItems = await erpDb.poItems.findMany({ where: { poId } });
     for (const item of items) {
-      const inv = allInventory.find((i: any) => i.sku === item.sku && i.branchCode === po.branchCode);
-      const availableQty = inv ? (inv.availableQty || inv.availableStock || inv.quantity || 0) : 0;
-      const newItemStatus = availableQty >= item.quantity ? "Available" : "Out of Stock";
+      const lineStatus = calcResult?.lineItems?.find(li => li.sku === item.sku)?.status;
+      const newItemStatus = lineStatus === "STOCK_ADJUSTED" || lineStatus === "IN_STOCK" ? "Available" : "Out of Stock";
       const existingRow = existingPoItems.find((pi: any) => pi.sku === item.sku);
       if (existingRow) {
         await erpDb.poItems.update({ where: { id: existingRow.id }, data: { itemStatus: newItemStatus } });
@@ -2314,20 +2330,46 @@ export async function verifyPurchaseOrderAction(poId: string) {
   const now = new Date();
   const expiryDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
 
-  // Update PO to Verified
+  // Authoritative Stock Status: do NOT overwrite with hardcoded "Available"
+  const authoritativeStockStatus = calcResult ? calcResult.overallStatus : (allAvailable ? "Available" : "Insufficient");
+
+  // Keep existing approval status! DO NOT automatically approve!
+  const currentApproval = (po as any).approvalStatus || "Pending Approval";
+  const newPoStatus = currentApproval === "Approved" ? "Cleared" : "Verified";
+
+  // Update PO to Verified in ERP
   await erpDb.purchaseOrders.update({
     where: { id: poId },
     data: {
       verificationStatus: "Verified",
       erpVerificationStatus: "Verified",
-      poStatus: (po as any).approvalStatus === "Approved" ? "Cleared" : "Verified",
-      stockStatus: "Available",
-      verifiedBy: performedBy,
-      verifiedDate: now
+      poStatus: newPoStatus,
+      stockStatus: authoritativeStockStatus,
+      verifiedBy: verifierName,
+      verifiedDate: now,
+      updatedAt: now
     }
   });
 
-  // Also sync directly to CRM schema
+  // Also persist directly to public.purchase_orders in PostgreSQL
+  try {
+    await prisma.$executeRawUnsafe(`
+      UPDATE public.purchase_orders
+      SET verification_status = 'Verified',
+          erp_verification_status = 'Verified',
+          po_status = CASE WHEN approval_status = 'Approved' THEN 'Cleared' ELSE 'Verified' END,
+          stock_status = $1,
+          verified_by = $2,
+          verified_date = NOW(),
+          verified_at = NOW(),
+          updated_at = NOW()
+      WHERE id = $3 OR po_number = $3;
+    `, authoritativeStockStatus, verifierName, poId);
+  } catch (err: any) {
+    console.error("Direct public.purchase_orders update error during verify:", err.message);
+  }
+
+  // Also sync directly to CRM schema without overriding approval_status
   try {
     await prisma.$executeRawUnsafe(`
       UPDATE crm.purchase_orders
@@ -2394,15 +2436,39 @@ export async function verifyPurchaseOrderAction(poId: string) {
     warning: stockWarningMsg || undefined
   });
 
-  revalidatePath("/purchase-orders");
-  revalidatePath("/opportunities");
-  revalidatePath("/dashboard");
+  try {
+    revalidatePath("/purchase-orders");
+    revalidatePath("/opportunities");
+    revalidatePath("/dashboard");
+  } catch {}
 
   return { success: true, opportunityNumber, warning: stockWarningMsg || undefined };
 }
 
 export async function approvePurchaseOrderAction(poId: string) {
-  const performedBy = await getCurrentUserId();
+  let performingUser: any = null;
+  try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get("erp-session-token")?.value;
+    if (token) {
+      const payload = await verifyJwt(token);
+      if (payload?.id) {
+        performingUser = await prisma.user.findUnique({
+          where: { id: payload.id as string },
+          include: { role: true, branch: true }
+        });
+      }
+    }
+  } catch {}
+
+  // RBAC check: Customers cannot approve POs
+  if (performingUser && performingUser.role?.name === "CUSTOMER") {
+    return { error: "Unauthorized: Customers cannot approve Purchase Orders." };
+  }
+
+  const approverName = performingUser?.name || (performingUser?.role?.name ? performingUser.role.name.replace(/_/g, " ") : "Operations Executive");
+  const performedBy = performingUser?.id || "system";
+
   const po = await erpDb.purchaseOrders.findUnique({ where: { id: poId } });
   if (!po) {
     return { error: "Purchase Order not found" };
@@ -2410,17 +2476,42 @@ export async function approvePurchaseOrderAction(poId: string) {
 
   const now = new Date();
 
-  // Update PO to Approved in ERP
+  // Update PO to Approved in ERP (auto-verifies if not yet verified)
   await erpDb.purchaseOrders.update({
     where: { id: poId },
     data: {
       approvalStatus: "Approved",
       poStatus: "Cleared",
-      verificationStatus: po.verificationStatus || "Verified",
+      verificationStatus: "Verified",
       erpVerificationStatus: "Verified",
+      approvedBy: approverName,
+      approvedDate: now,
+      verifiedBy: po.verifiedBy || approverName,
+      verifiedDate: po.verifiedDate || now,
       updatedAt: now
     }
   });
+
+  // Also update approval & verification fields in postgres table directly
+  try {
+    await prisma.$executeRawUnsafe(`
+      UPDATE public.purchase_orders
+      SET approval_status = 'Approved',
+          verification_status = 'Verified',
+          erp_verification_status = 'Verified',
+          po_status = 'Cleared',
+          approved_by = $1,
+          approved_date = NOW(),
+          approved_at = NOW(),
+          verified_by = COALESCE(verified_by, $1),
+          verified_date = COALESCE(verified_date, NOW()),
+          verified_at = COALESCE(verified_at, NOW()),
+          updated_at = NOW()
+      WHERE id = $2 OR po_number = $2;
+    `, approverName, poId);
+  } catch (err: any) {
+    console.error("Direct public.purchase_orders update error during approve:", err.message);
+  }
 
   // Directly update CRM schema crm.purchase_orders
   try {
@@ -2438,10 +2529,18 @@ export async function approvePurchaseOrderAction(poId: string) {
 
   await syncErpPoToCrm(poId);
 
-  revalidatePath("/purchase-orders");
-  revalidatePath("/dashboard");
+  auditLog("PO_APPROVAL", performedBy, po.customerId, {
+    poNumber: po.poNumber,
+    approvalStatus: "Approved",
+    approvedBy: approverName
+  });
 
-  return { success: true, poNumber: po.poNumber };
+  try {
+    revalidatePath("/purchase-orders");
+    revalidatePath("/dashboard");
+  } catch {}
+
+  return { success: true, poNumber: po.poNumber, approvedBy: approverName };
 }
 
 export async function lookupPurchaseOrderByNumberAction(poNumber: string) {
@@ -2581,6 +2680,16 @@ export async function createPurchaseOrderAction(data: {
         } catch (poItemErr: any) {
           console.warn("PoItem creation warning:", poItemErr.message);
         }
+      }
+    }
+
+    // 1. Authoritatively check & allocate inventory immediately for each line
+    if (created?.id) {
+      try {
+        const { allocateStockForPO } = await import("@/lib/stock-service");
+        await allocateStockForPO(created.id);
+      } catch (allocErr: any) {
+        console.error("Error in allocateStockForPO at PO creation:", allocErr);
       }
     }
 

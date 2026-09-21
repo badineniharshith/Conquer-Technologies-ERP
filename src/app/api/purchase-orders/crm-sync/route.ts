@@ -221,6 +221,14 @@ export async function POST(req: NextRequest) {
           WHERE po_number = $2
         `, erpPoId, po.po_number);
 
+        // Immediate stock allocation: assign available inventory directly to this PO
+        try {
+          const { allocateStockForPO } = await import("@/lib/stock-service");
+          await allocateStockForPO(erpPoId);
+        } catch (allocErr: any) {
+          console.error(`Error auto-allocating stock for synced PO ${po.po_number}:`, allocErr.message);
+        }
+
         syncedPOs.push(po.po_number);
       } catch (err: any) {
         console.error(`Error syncing PO ${po.po_number}:`, err.message);

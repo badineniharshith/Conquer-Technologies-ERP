@@ -1190,7 +1190,7 @@ export default function InventoryClient({
             <button
               type="submit"
               disabled={grnLoading || !selectedPrId}
-              className="w-full px-4 py-2.5 bg-indigo-650 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all shadow-md shadow-indigo-650/10 cursor-pointer disabled:opacity-55"
+              className="w-full px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all shadow-md shadow-indigo-600/10 cursor-pointer disabled:opacity-55"
             >
               {grnLoading ? "Processing GRN Intake..." : "Process GRN Receipt & Add Stock"}
             </button>

@@ -804,7 +804,7 @@ export default function SettingsClient({ users, roles, branches = [], auditLogs 
 
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-orange-500 hover:bg-orange-650 text-white rounded-lg text-xs font-bold transition-all shadow-md cursor-pointer"
+                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-bold transition-all shadow-md cursor-pointer"
                 >
                   Update Credentials
                 </button>

@@ -182,7 +182,9 @@ export async function syncPoStockReservation(poId: string) {
       }
     });
 
+    let targetResId = resId;
     if (existingRes) {
+      targetResId = existingRes.id;
       await prisma.stockReservation.update({
         where: { id: existingRes.id },
         data: {
@@ -210,6 +212,11 @@ export async function syncPoStockReservation(poId: string) {
         }
       });
     }
+
+    try {
+      const { syncStockReservationToCrm } = await import("@/lib/stock-reservation-service");
+      await syncStockReservationToCrm(targetResId);
+    } catch {}
   } catch (err: any) {
     console.error("Error in syncPoStockReservation:", err.message);
   }

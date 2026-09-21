@@ -97,6 +97,15 @@ export default function ReservedStockClient({
     setTimeout(() => setCopiedSku(null), 2000);
   };
 
+  const handleCopyText = (text: string, label: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedSku(text);
+    toast.success(`Copied ${label}: ${text}`);
+    setTimeout(() => setCopiedSku(null), 2000);
+  };
+
   const isCustomer = currentUser.role === "CUSTOMER";
 
   // Filter active customers based on text input - supports Customer ID, Name, Company, Email
@@ -618,15 +627,41 @@ export default function ReservedStockClient({
               const timer = getRemainingTime(res.expiresAt);
               const progressPercent = Math.max(0, Math.min(100, ( ( 14 * 24 * 60 * 60 * 1000 - (new Date(res.expiresAt).getTime() - currentTime.getTime()) ) / (14 * 24 * 60 * 60 * 1000) ) * 100));
 
+              const resNum = res.reservationNumber || res.id;
+
               return (
                 <div key={res.id} className="bg-white border border-stone-200 hover:border-orange-500/30 rounded-2xl p-5 flex flex-col justify-between space-y-4 shadow-sm hover:shadow-md transition-all">
                   <div className="space-y-3">
+                    {/* Unique Reservation Number Bar */}
+                    <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-stone-100">
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-flex items-center gap-1.5 bg-orange-50 text-orange-950 border border-orange-200/90 px-2.5 py-1 rounded-lg text-xs font-mono font-extrabold tracking-tight">
+                          <span>{resNum}</span>
+                          <button
+                            type="button"
+                            onClick={(e) => handleCopyText(resNum, "Reservation #", e)}
+                            className="text-stone-400 hover:text-orange-600 p-0.5 cursor-pointer transition-colors"
+                            title="Copy Reservation Number for CRM Opportunities"
+                          >
+                            {copiedSku === resNum ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        </span>
+                      </div>
+                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border uppercase ${getStatusBadge(res.status)}`}>
+                        {res.status}
+                      </span>
+                    </div>
+
                     <div className="flex items-center justify-between">
                       <span className="text-[8px] font-bold text-orange-600 bg-orange-50 border border-orange-100 px-1.5 py-0.5 rounded uppercase">
                         {res.items && res.items.length > 0 ? "Ecosystem" : (res.product?.brand || "Brand")}
                       </span>
-                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border uppercase ${getStatusBadge(res.status)}`}>
-                        {res.status}
+                      <span className="text-[9px] text-stone-400 font-mono font-semibold">
+                        CRM Linked
                       </span>
                     </div>
 
@@ -1445,11 +1480,34 @@ export default function ReservedStockClient({
       {showEditModal && editingRes && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white border border-orange-200 rounded-2xl max-w-md w-full p-6 space-y-6 shadow-2xl relative animate-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-bold text-sm text-stone-950 flex items-center space-x-2 font-outfit">
-                <Edit2 className="w-5 h-5 text-orange-500" />
-                <span>Edit Stock Reservation</span>
-              </h3>
+            <div className="flex justify-between items-center pb-3 border-b border-stone-100">
+              <div>
+                <h3 className="font-bold text-stone-900 text-sm flex items-center space-x-2">
+                  <Edit2 className="w-5 h-5 text-orange-500" />
+                  <span>Edit Stock Reservation</span>
+                </h3>
+                {editingRes && (
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="font-mono font-bold text-xs text-orange-600 bg-orange-50 px-2.5 py-0.5 rounded border border-orange-200 flex items-center gap-1.5">
+                      {editingRes.reservationNumber || editingRes.id}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(editingRes.reservationNumber || editingRes.id);
+                          toast.success("Reservation number copied to clipboard!");
+                        }}
+                        className="text-orange-500 hover:text-orange-700 transition-colors cursor-pointer p-0.5"
+                        title="Copy reservation number"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                    </span>
+                    <span className="text-[10px] text-stone-400 font-mono">
+                      CRM Deal Ref: {editingRes.reservationNumber || editingRes.id}
+                    </span>
+                  </div>
+                )}
+              </div>
               <button 
                 onClick={() => {
                   setShowEditModal(false);

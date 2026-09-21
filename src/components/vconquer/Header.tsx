@@ -18,7 +18,9 @@ import {
   ChevronDown,
   User as UserIcon,
   Settings as SettingsIcon,
-  LogOut
+  LogOut,
+  ExternalLink,
+  Building
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
@@ -202,6 +204,21 @@ export default function Header() {
                       <SettingsIcon className="w-4 h-4 text-stone-400" />
                       <span>Settings</span>
                     </Link>
+
+                    {/* Go to CRM Website — Direct Link */}
+                    <a
+                      href="https://conquer-technologies-crm.vercel.app/login"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => setProfileDropdownOpen(false)}
+                      className="flex items-center justify-between px-3 py-2 rounded-xl bg-orange-50/80 hover:bg-orange-100/90 border border-orange-200/70 text-orange-950 transition-colors cursor-pointer group"
+                    >
+                      <div className="flex items-center space-x-2.5">
+                        <Building className="w-4 h-4 text-orange-600" />
+                        <span className="font-bold text-stone-900 group-hover:text-orange-700">Go to CRM Website</span>
+                      </div>
+                      <ExternalLink className="w-3.5 h-3.5 text-stone-400 group-hover:text-orange-600 transition-colors" />
+                    </a>
                   </div>
 
                   <div className="border-t border-stone-100 p-1">

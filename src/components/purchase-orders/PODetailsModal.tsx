@@ -1,28 +1,36 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import { 
   Loader2, 
   CheckCircle2, 
   AlertTriangle, 
   X, 
   Package, 
-  Building,
-  Printer,
-  FileText,
-  BadgeIndianRupee,
-  MapPin,
-  Phone,
-  Mail,
-  Calendar,
-  Truck,
-  Hash,
-  AlertCircle,
-  ShoppingBag,
-  Store,
-  ArrowUpRight
+  Building, 
+  Printer, 
+  FileText, 
+  BadgeIndianRupee, 
+  MapPin, 
+  Phone, 
+  Mail, 
+  Calendar, 
+  Truck, 
+  Hash, 
+  AlertCircle, 
+  ShoppingBag, 
+  Store, 
+  ArrowUpRight,
+  ShieldCheck,
+  UserCheck,
+  Clock,
+  RefreshCw
 } from "lucide-react";
 import { motion } from "framer-motion";
+import { toast } from "sonner";
+import { useErpStore } from "@/lib/store";
+import { verifyPurchaseOrderAction, approvePurchaseOrderAction } from "@/app/actions";
 
 interface PODetailsModalProps {
   poIdentifier: string; // PO ID or poNumber
@@ -30,30 +38,83 @@ interface PODetailsModalProps {
 }
 
 export default function PODetailsModal({ poIdentifier, onClose }: PODetailsModalProps) {
+  const { activeRole, activeUser } = useErpStore();
   const [poData, setPoData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    async function fetchPoDetails() {
-      if (!poIdentifier) return;
-      try {
-        setLoading(true);
-        setError(null);
-        const res = await fetch(`/api/purchase-orders/audit/${encodeURIComponent(poIdentifier)}`);
-        const json = await res.json();
-        if (json.success && json.data) {
-          setPoData(json.data);
-        } else {
-          setError(json.error || json.reason || "Failed to load Purchase Order details.");
-        }
-      } catch (err: any) {
-        setError("Network error fetching Purchase Order details.");
-      } finally {
-        setLoading(false);
+  const effectiveRole = activeRole || (typeof activeUser?.role === 'string' ? activeUser.role : (activeUser as any)?.role?.name) || (activeUser as any)?.roleId || "EMPLOYEE";
+  const isStaff = [
+    "SUPER_ADMIN", "ADMIN", "DIRECTOR_OPERATIONS", "OPERATIONS_MANAGER", 
+    "ASSISTANT_MANAGER", "OPERATIONS_EXECUTIVE", "EMPLOYEE", "BRANCH_MANAGER", 
+    "SALES_HEAD", "REGIONAL_SALES_MANAGER", "SALES_MANAGER", "SALES_EXECUTIVE"
+  ].includes(effectiveRole);
+  const canVerify = isStaff;
+  const canApprove = [
+    "SUPER_ADMIN", "ADMIN", "DIRECTOR_OPERATIONS", "OPERATIONS_MANAGER", 
+    "ASSISTANT_MANAGER", "OPERATIONS_EXECUTIVE", "BRANCH_MANAGER", "SALES_HEAD", 
+    "REGIONAL_SALES_MANAGER"
+  ].includes(effectiveRole);
+
+  const fetchPoDetails = async () => {
+    if (!poIdentifier) return;
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await fetch(`/api/purchase-orders/audit/${encodeURIComponent(poIdentifier)}`);
+      const json = await res.json();
+      if (json.success && json.data) {
+        setPoData(json.data);
+      } else {
+        setError(json.error || json.reason || "Failed to load Purchase Order details.");
       }
+    } catch (err: any) {
+      setError("Network error fetching Purchase Order details.");
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const handleModalVerify = async () => {
+    if (!poData?.id) return;
+    setActionLoading(true);
+    try {
+      const res = await verifyPurchaseOrderAction(poData.id);
+      if (res.error) {
+        toast.error(res.error);
+      } else {
+        toast.success(`✅ PO verified successfully! Stock status: ${(res as any).stockStatus || "Verified"}.`);
+        if (res.warning) toast.warning(res.warning, { duration: 8000 });
+        await fetchPoDetails();
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to verify Purchase Order");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleModalApprove = async () => {
+    if (!poData?.id) return;
+    setActionLoading(true);
+    try {
+      const res = await approvePurchaseOrderAction(poData.id);
+      if (res.error) {
+        toast.error(res.error);
+      } else {
+        toast.success(`🎉 Purchase Order ${res.poNumber} has been approved!`);
+        await fetchPoDetails();
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to approve Purchase Order");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchPoDetails();
   }, [poIdentifier]);
 
@@ -66,24 +127,36 @@ export default function PODetailsModal({ poIdentifier, onClose }: PODetailsModal
     }
 
     const itemsRowsHtml = poData.lineItems?.map((item: any, idx: number) => {
-      const hasShortage = item.needToOrder > 0;
+      const isAdjusted = item.status === "STOCK ADJUSTED & ASSIGNED" || item.status === "STOCK_ADJUSTED" || (item.adjustedQty && item.adjustedQty >= item.requestedQty);
+      const isPartiallyAdjusted = item.status === "PARTIALLY ASSIGNED / PENDING STOCK" || item.status === "PARTIALLY_STOCK_ADJUSTED" || (item.adjustedQty > 0 && (item.pendingQty > 0 || item.remainingQty > 0));
+      const pendingUnits = item.pendingQty ?? item.remainingQty ?? 0;
+      const hasShortage = !isAdjusted && !isPartiallyAdjusted && pendingUnits > 0;
+
+      let statusBadgeHtml = `<span style="padding: 2px 6px; background-color: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; border-radius: 4px; font-weight: 800; font-size: 9px;">ASSIGNED</span>`;
+      if (isAdjusted) {
+        statusBadgeHtml = `<span style="padding: 2px 6px; background-color: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; border-radius: 4px; font-weight: 800; font-size: 9px;">✓ Stock Adjusted & Assigned</span>`;
+      } else if (isPartiallyAdjusted) {
+        statusBadgeHtml = `<span style="padding: 2px 6px; background-color: #fffbeb; color: #b45309; border: 1px solid #fde68a; border-radius: 4px; font-weight: 800; font-size: 9px;">Partially Assigned (${item.allocatedQty}/${item.requestedQty})</span>`;
+      } else if (hasShortage) {
+        statusBadgeHtml = `<span style="padding: 2px 6px; background-color: #ffe4e6; color: #9f1239; border: 1px solid #fecdd3; border-radius: 4px; font-weight: 800; font-size: 9px;">Pending Stock (${pendingUnits} Shortage)</span>`;
+      }
+
       return `
-        <tr style="border-bottom: 1px solid #e2e8f0; ${hasShortage ? 'background-color: #fffbeb;' : ''}">
+        <tr style="border-bottom: 1px solid #e2e8f0; ${isAdjusted ? 'background-color: #f0fdf4;' : hasShortage ? 'background-color: #fffbeb;' : ''}">
           <td style="padding: 8px 10px; font-family: monospace; color: #64748b; font-size: 10px; text-align: center;">${idx + 1}</td>
           <td style="padding: 8px 10px;">
             <div style="font-weight: 700; color: #0f172a; font-size: 11px;">${item.name}</div>
             <div style="font-family: monospace; color: #64748b; font-size: 9px;">SKU: ${item.sku}</div>
+            ${item.lastAdjustmentNumber ? `<div style="font-family: monospace; color: #059669; font-size: 8px; font-weight: bold;">Adj: ${item.lastAdjustmentNumber}</div>` : ''}
           </td>
           <td style="padding: 8px 10px; text-align: center; font-weight: 800; color: #0f172a;">${item.requestedQty}</td>
           <td style="padding: 8px 10px; text-align: right; font-family: monospace; font-weight: 600;">₹${Number(item.unitPrice || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
           <td style="padding: 8px 10px; text-align: center; font-family: monospace;">${item.discount ? item.discount + '%' : '—'}</td>
           <td style="padding: 8px 10px; text-align: center; font-family: monospace;">${item.tax ? item.tax + '%' : '18%'}</td>
           <td style="padding: 8px 10px; text-align: right; font-family: monospace; font-weight: 700; color: #0f172a;">₹${Number(item.total || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-          <td style="padding: 8px 10px; text-align: center; font-family: monospace; font-weight: 700; ${item.currentStock >= item.requestedQty ? 'color: #047857;' : 'color: #b45309;'}">${item.currentStock}</td>
+          <td style="padding: 8px 10px; text-align: center; font-family: monospace; font-weight: 700; ${item.currentStock >= item.requestedQty || isAdjusted ? 'color: #047857;' : 'color: #b45309;'}">${item.currentStock}</td>
           <td style="padding: 8px 10px; text-align: center;">
-            ${hasShortage 
-              ? `<span style="padding: 2px 6px; background-color: #ffe4e6; color: #9f1239; border: 1px solid #fecdd3; border-radius: 4px; font-weight: 800; font-size: 9px;">${item.needToOrder} Units</span>` 
-              : `<span style="color: #047857; font-weight: 700; font-size: 10px;">In Stock</span>`}
+            ${statusBadgeHtml}
           </td>
         </tr>
       `;
@@ -458,6 +531,16 @@ export default function PODetailsModal({ poIdentifier, onClose }: PODetailsModal
         </div>
 
         <div className="flex items-center space-x-2">
+          {((poData.totalPending || poData.totalRemaining || 0) > 0 || poData.stockStatus === "PARTIALLY ASSIGNED / PENDING STOCK" || poData.stockStatus === "PENDING STOCK") && (
+            <Link
+              href={`/stock-movement?action=adjust&poId=${encodeURIComponent(poData.id)}&sku=${encodeURIComponent(poData.lineItems?.find((i: any) => (i.pendingQty || i.remainingQty || 0) > 0)?.sku || poData.lineItems?.[0]?.sku || "")}&pending=${encodeURIComponent(poData.totalPending || poData.totalRemaining || 0)}`}
+              className="inline-flex items-center space-x-1.5 px-3 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-xs font-black rounded-xl transition-all shadow-sm cursor-pointer active:scale-95"
+            >
+              <ArrowUpRight className="w-3.5 h-3.5" />
+              <span>Adjust Stock</span>
+            </Link>
+          )}
+
           <button
             onClick={handlePrint}
             className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-stone-900 hover:bg-black text-white text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer"
@@ -573,10 +656,47 @@ export default function PODetailsModal({ poIdentifier, onClose }: PODetailsModal
           </div>
         )}
 
-        {/* Stock Shortage Warning Alert */}
-        {totalShortageQty > 0 && (
-          <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl flex items-center justify-between text-amber-900 text-xs print-border">
-            <div className="flex items-center space-x-2">
+        {/* Dynamic Stock Status Banner */}
+        {poData.stockStatus === "Stock Adjusted" ? (
+          <div className="p-3.5 bg-emerald-50 border border-emerald-300 rounded-xl flex items-center justify-between text-emerald-950 text-xs print-border">
+            <div className="flex items-center space-x-2.5">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              <div>
+                <div className="font-extrabold text-emerald-950">
+                  Stock Adjusted & Fulfillable: All {poData.totalRequested || 0} Units Covered
+                </div>
+                <div className="text-[10px] text-emerald-800 mt-0.5">
+                  The required quantity has been covered by an actual stock adjustment.
+                  {poData.lastAdjustmentNumber && ` (Adjustment ID: ${poData.lastAdjustmentNumber})`}
+                  {poData.lastAdjustedAt && ` on ${new Date(poData.lastAdjustedAt).toLocaleString("en-IN")}`}
+                </div>
+              </div>
+            </div>
+            <span className="px-2.5 py-1 bg-emerald-600 text-white font-black text-[10px] rounded-lg uppercase tracking-wider shrink-0">
+              Stock Adjusted
+            </span>
+          </div>
+        ) : poData.stockStatus === "Partially Stock Adjusted" ? (
+          <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-xl flex items-center justify-between text-amber-950 text-xs print-border">
+            <div className="flex items-center space-x-2.5">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+              <div>
+                <div className="font-extrabold text-amber-950">
+                  Stock Partially Adjusted: {poData.totalAllocated || 0} / {poData.totalRequested || 0} Units Fulfilled
+                </div>
+                <div className="text-[10px] text-amber-800 mt-0.5">
+                  {poData.totalRemaining || 0} units still remaining to be fulfilled.
+                  {poData.lastAdjustmentNumber && ` (Latest Adjustment: ${poData.lastAdjustmentNumber})`}
+                </div>
+              </div>
+            </div>
+            <span className="px-2.5 py-1 bg-amber-600 text-white font-black text-[10px] rounded-lg uppercase tracking-wider shrink-0">
+              Partially Adjusted
+            </span>
+          </div>
+        ) : totalShortageQty > 0 ? (
+          <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-xl flex items-center justify-between text-amber-900 text-xs print-border">
+            <div className="flex items-center space-x-2.5">
               <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
               <div>
                 <div className="font-black text-amber-950">Inventory Action Required: {totalShortageQty} Units Need to be Ordered</div>
@@ -585,64 +705,172 @@ export default function PODetailsModal({ poIdentifier, onClose }: PODetailsModal
                 </div>
               </div>
             </div>
-            <span className="px-2.5 py-1 bg-amber-600 text-white font-black text-[10px] rounded-lg uppercase tracking-wider">
+            <span className="px-2.5 py-1 bg-amber-600 text-white font-black text-[10px] rounded-lg uppercase tracking-wider shrink-0">
               Shortage
             </span>
           </div>
-        )}
+        ) : null}
+
+        {/* Requirement 6: Dedicated Stock Allocation & Pending Fulfillment Breakdown Section */}
+        <div className="bg-stone-50/80 p-4 rounded-xl border border-stone-200 print-border space-y-3">
+          <div className="flex items-center justify-between border-b border-stone-200 pb-2.5">
+            <div className="flex items-center space-x-2">
+              <Package className="w-4 h-4 text-orange-600" />
+              <h4 className="text-xs font-black uppercase tracking-wider text-stone-900">
+                Stock Allocation & Pending Fulfillment Breakdown
+              </h4>
+            </div>
+            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase border ${
+              poData.stockStatus === "STOCK ADJUSTED & ASSIGNED" || poData.stockStatus === "Stock Adjusted"
+                ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                : poData.stockStatus === "ASSIGNED" || poData.stockStatus === "Available"
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                : poData.stockStatus === "PARTIALLY ASSIGNED / PENDING STOCK" || poData.stockStatus === "Partially Stock Adjusted"
+                ? "bg-amber-100 text-amber-800 border-amber-300"
+                : "bg-rose-50 text-rose-700 border-rose-200"
+            }`}>
+              {poData.stockStatus === "STOCK ADJUSTED & ASSIGNED" || poData.stockStatus === "Stock Adjusted" ? "✓ Stock Adjusted & Assigned" : poData.stockStatus}
+            </span>
+          </div>
+
+          {/* Allocation Metrics Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div className="bg-white p-2.5 rounded-lg border border-stone-200 shadow-xs">
+              <div className="text-[10px] uppercase font-bold text-stone-400">Requested Quantity</div>
+              <div className="text-base font-black text-stone-900 mt-0.5">{poData.totalRequested || 0}</div>
+            </div>
+            <div className="bg-white p-2.5 rounded-lg border border-stone-200 shadow-xs">
+              <div className="text-[10px] uppercase font-bold text-stone-400">Available at PO Creation</div>
+              <div className="text-base font-black text-stone-800 mt-0.5">{poData.totalAvailableAtCreation || 0}</div>
+            </div>
+            <div className="bg-white p-2.5 rounded-lg border border-stone-200 shadow-xs">
+              <div className="text-[10px] uppercase font-bold text-stone-400">Initially Assigned</div>
+              <div className="text-base font-black text-emerald-700 mt-0.5">{poData.totalInitiallyAssigned || 0}</div>
+            </div>
+            <div className="bg-white p-2.5 rounded-lg border border-stone-200 shadow-xs">
+              <div className="text-[10px] uppercase font-bold text-stone-400">Pending Quantity</div>
+              <div className={`text-base font-black mt-0.5 ${(poData.totalPending || poData.totalRemaining || 0) > 0 ? "text-rose-600" : "text-stone-700"}`}>
+                {poData.totalPending || poData.totalRemaining || 0}
+              </div>
+            </div>
+
+            <div className="bg-white p-2.5 rounded-lg border border-stone-200 shadow-xs">
+              <div className="text-[10px] uppercase font-bold text-stone-400">Additional Stock Received</div>
+              <div className="text-base font-black text-emerald-700 mt-0.5">{poData.totalAdjusted || 0}</div>
+            </div>
+            <div className="bg-white p-2.5 rounded-lg border border-stone-200 shadow-xs">
+              <div className="text-[10px] uppercase font-bold text-stone-400">Assigned After Adjustment</div>
+              <div className="text-base font-black text-emerald-700 mt-0.5">{poData.totalAdjusted || 0}</div>
+            </div>
+            <div className="bg-white p-2.5 rounded-lg border border-stone-200 shadow-xs">
+              <div className="text-[10px] uppercase font-bold text-stone-400">Final Assigned</div>
+              <div className="text-base font-black text-stone-900 mt-0.5">{poData.totalAllocated || 0}</div>
+            </div>
+            <div className="bg-white p-2.5 rounded-lg border border-stone-200 shadow-xs">
+              <div className="text-[10px] uppercase font-bold text-stone-400">Remaining Pending</div>
+              <div className={`text-base font-black mt-0.5 ${(poData.totalPending || poData.totalRemaining || 0) > 0 ? "text-rose-600 font-extrabold" : "text-emerald-700 font-extrabold"}`}>
+                {poData.totalPending || poData.totalRemaining || 0}
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* Product Items Table */}
         <div className="border border-stone-200 rounded-xl overflow-hidden print-border">
           <table className="w-full text-xs text-left border-collapse">
             <thead className="bg-stone-100 border-b border-stone-200 text-stone-600 font-bold uppercase text-[9px] tracking-wider print-bg-header">
               <tr>
-                <th className="px-3 py-2.5">#</th>
-                <th className="px-3 py-2.5">Item Description & SKU</th>
-                <th className="px-3 py-2.5 text-center">Ordered Qty</th>
-                <th className="px-3 py-2.5 text-right">Unit Price (₹)</th>
-                <th className="px-3 py-2.5 text-center">Disc (%)</th>
-                <th className="px-3 py-2.5 text-center">Tax (GST)</th>
-                <th className="px-3 py-2.5 text-right">Net Total (₹)</th>
-                <th className="px-3 py-2.5 text-center">Stock Avail</th>
-                <th className="px-3 py-2.5 text-center">Need to Order</th>
+                <th className="px-2.5 py-2.5">#</th>
+                <th className="px-2.5 py-2.5">Item & SKU</th>
+                <th className="px-2 py-2.5 text-center">Req</th>
+                <th className="px-2 py-2.5 text-center">Init Avail</th>
+                <th className="px-2 py-2.5 text-center">Init Assigned</th>
+                <th className="px-2 py-2.5 text-center">Adjusted</th>
+                <th className="px-2 py-2.5 text-center">Final Assigned</th>
+                <th className="px-2 py-2.5 text-center">Pending</th>
+                <th className="px-2.5 py-2.5 text-right">Price (₹)</th>
+                <th className="px-2.5 py-2.5 text-right">Total (₹)</th>
+                <th className="px-2.5 py-2.5 text-center">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-150">
               {poData.lineItems?.map((item: any, idx: number) => {
-                const hasShortage = item.needToOrder > 0;
+                const isAdjusted = item.status === "STOCK ADJUSTED & ASSIGNED" || item.status === "STOCK_ADJUSTED" || (item.adjustedQty && item.adjustedQty >= item.requestedQty);
+                const isPartiallyAdjusted = item.status === "PARTIALLY ASSIGNED / PENDING STOCK" || item.status === "PARTIALLY_STOCK_ADJUSTED" || (item.adjustedQty > 0 && item.remainingQty > 0);
+                const hasShortage = !isAdjusted && !isPartiallyAdjusted && (item.remainingQty > 0 || item.needToOrder > 0);
+                const pendingCount = item.pendingQty ?? item.remainingQty ?? 0;
+
                 return (
-                  <tr key={idx} className={hasShortage ? "bg-amber-50/40" : "hover:bg-stone-50"}>
-                    <td className="px-3 py-2.5 font-mono text-stone-400 text-[10px]">{idx + 1}</td>
-                    <td className="px-3 py-2.5">
+                  <tr key={idx} className={isAdjusted ? "bg-emerald-50/30" : hasShortage ? "bg-amber-50/40" : "hover:bg-stone-50"}>
+                    <td className="px-2.5 py-2.5 font-mono text-stone-400 text-[10px]">{idx + 1}</td>
+                    <td className="px-2.5 py-2.5">
                       <div className="font-bold text-stone-900">{item.name}</div>
                       <div className="text-[10px] font-mono text-stone-500">SKU: {item.sku}</div>
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        {(item.initialAssignedQty > 0 || (item.allocatedQty > 0 && !item.adjustedQty)) && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-800 font-extrabold border border-blue-200">
+                            {item.initialAssignedQty ?? item.allocatedQty} units — Assigned at PO Creation
+                          </span>
+                        )}
+                        {(item.adjustedQty > 0) && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 font-extrabold border border-emerald-200">
+                            {item.adjustedQty} units — Assigned through Stock Adjustment
+                          </span>
+                        )}
+                      </div>
+                      {item.lastAdjustmentNumber && (
+                        <div className="text-[9px] font-mono text-emerald-700 font-bold mt-0.5">
+                          Adj: {item.lastAdjustmentNumber}
+                        </div>
+                      )}
                     </td>
-                    <td className="px-3 py-2.5 text-center font-extrabold text-stone-900">{item.requestedQty}</td>
-                    <td className="px-3 py-2.5 text-right font-mono font-medium text-stone-800">
+                    <td className="px-2 py-2.5 text-center font-extrabold text-stone-900">{item.requestedQty}</td>
+                    <td className="px-2 py-2.5 text-center font-mono font-bold text-stone-600">{item.initialAvailableStock ?? item.currentStock}</td>
+                    <td className="px-2 py-2.5 text-center font-mono font-bold text-emerald-700">{item.initialAssignedQty ?? 0}</td>
+                    <td className="px-2 py-2.5 text-center font-mono font-bold text-emerald-700">+{item.adjustedQty ?? 0}</td>
+                    <td className="px-2 py-2.5 text-center font-mono font-black text-stone-900">{item.allocatedQty}</td>
+                    <td className="px-2 py-2.5 text-center font-mono font-bold">
+                      {pendingCount > 0 ? (
+                        <span className="text-rose-600 font-extrabold">{pendingCount}</span>
+                      ) : (
+                        <span className="text-stone-400">0</span>
+                      )}
+                    </td>
+                    <td className="px-2.5 py-2.5 text-right font-mono font-medium text-stone-800">
                       ₹{item.unitPrice?.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                     </td>
-                    <td className="px-3 py-2.5 text-center font-mono text-stone-600">
-                      {item.discount ? `${item.discount}%` : "—"}
-                    </td>
-                    <td className="px-3 py-2.5 text-center font-mono text-stone-600">
-                      {item.tax ? `${item.tax}%` : "18%"}
-                    </td>
-                    <td className="px-3 py-2.5 text-right font-mono font-bold text-stone-950">
+                    <td className="px-2.5 py-2.5 text-right font-mono font-bold text-stone-950">
                       ₹{item.total?.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                     </td>
-                    <td className="px-3 py-2.5 text-center font-mono font-bold text-stone-800">
-                      <span className={item.currentStock >= item.requestedQty ? "text-emerald-700" : "text-amber-700"}>
-                        {item.currentStock}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5 text-center">
-                      {hasShortage ? (
-                        <span className="px-2 py-0.5 bg-rose-100 text-rose-800 border border-rose-300 font-extrabold text-[10px] rounded-md inline-block">
-                          {item.needToOrder} Units
-                        </span>
-                      ) : (
-                        <span className="text-emerald-600 text-[10px] font-bold">In Stock</span>
-                      )}
+                    <td className="px-2.5 py-2.5 text-center">
+                      <div className="flex flex-col items-center gap-1">
+                        {isAdjusted ? (
+                          <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-300 font-extrabold text-[9px] rounded-md inline-block">
+                            ✓ Stock Adjusted & Assigned
+                          </span>
+                        ) : isPartiallyAdjusted ? (
+                          <span className="px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-300 font-extrabold text-[9px] rounded-md inline-block">
+                            Partially Assigned ({item.allocatedQty}/{item.requestedQty})
+                          </span>
+                        ) : hasShortage ? (
+                          <span className="px-2 py-0.5 bg-rose-100 text-rose-800 border border-rose-300 font-extrabold text-[9px] rounded-md inline-block">
+                            Pending Stock ({pendingCount} Shortage)
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[9px] font-bold rounded-md inline-block">
+                            ASSIGNED
+                          </span>
+                        )}
+                        {pendingCount > 0 && (
+                          <Link
+                            href={`/stock-movement?action=adjust&poId=${encodeURIComponent(poData.id)}&sku=${encodeURIComponent(item.sku)}&pending=${encodeURIComponent(pendingCount)}`}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-500 hover:bg-amber-600 text-white rounded text-[9px] font-bold shadow-xs transition-all"
+                          >
+                            <ArrowUpRight className="w-2.5 h-2.5" />
+                            <span>Adjust</span>
+                          </Link>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -669,6 +897,34 @@ export default function PODetailsModal({ poIdentifier, onClose }: PODetailsModal
           </div>
         </div>
 
+        {/* Requirement 8: Audit History Timeline */}
+        {poData.statusHistory && poData.statusHistory.length > 0 && (
+          <div className="bg-stone-50/90 p-4 rounded-xl border border-stone-200 space-y-2.5 text-xs no-print">
+            <div className="flex items-center space-x-1.5 font-black text-stone-900 uppercase text-[10px] tracking-wider text-orange-700">
+              <Clock className="w-3.5 h-3.5 shrink-0" />
+              <span>Stock Allocation & Adjustment Audit History</span>
+            </div>
+            <div className="divide-y divide-stone-200/70">
+              {poData.statusHistory.map((hist: any, hIdx: number) => (
+                <div key={hIdx} className="py-2.5 flex items-start justify-between gap-3">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-stone-900 text-[11px]">{hist.status || "Status Update"}</span>
+                      {hist.updatedByName && (
+                        <span className="text-[9px] text-stone-400">by {hist.updatedByName}</span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-stone-600 font-mono leading-relaxed">{hist.remarks || "No additional remarks"}</p>
+                  </div>
+                  <span className="text-[10px] text-stone-400 shrink-0 font-mono">
+                    {hist.createdAt ? new Date(hist.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : ""}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Terms & Authorization Signatures (Visible on Printable PDF) */}
         <div className="pt-6 border-t border-stone-200 grid grid-cols-2 gap-8 text-[10px] text-stone-500">
           <div>
@@ -687,14 +943,103 @@ export default function PODetailsModal({ poIdentifier, onClose }: PODetailsModal
         </div>
       </div>
 
-      {/* Screen Close Action */}
-      <div className="pt-3 border-t flex justify-end no-print">
-        <button
-          onClick={onClose}
-          className="px-5 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
-        >
-          Close View
-        </button>
+      {/* Screen Action Bar (Verify, Approve, Close) */}
+      <div className="pt-4 border-t border-stone-200 flex flex-wrap items-center justify-between gap-3 no-print bg-stone-50/80 -mx-1 px-4 py-3 rounded-xl">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] font-bold text-stone-500">Workflow State:</span>
+          {poData.verificationStatus === "Verified" ? (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+              <CheckCircle2 className="w-3 h-3" />
+              <span>Verified</span>
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+              <Clock className="w-3 h-3" />
+              <span>Verification Pending</span>
+            </span>
+          )}
+
+          {(poData.approvalStatus === "Approved" || poData.approvalStatus === "APPROVED") ? (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+              <CheckCircle2 className="w-3 h-3" />
+              <span>Approved</span>
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full bg-stone-200 text-stone-700">
+              <span>Approval Pending</span>
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* ADJUST STOCK BUTTON */}
+          {((poData.totalPending || poData.totalRemaining || 0) > 0 || poData.stockStatus === "PARTIALLY ASSIGNED / PENDING STOCK" || poData.stockStatus === "PENDING STOCK") && (
+            <Link
+              href={`/stock-movement?action=adjust&poId=${encodeURIComponent(poData.id)}&sku=${encodeURIComponent(poData.lineItems?.find((i: any) => (i.pendingQty || i.remainingQty || 0) > 0)?.sku || poData.lineItems?.[0]?.sku || "")}&pending=${encodeURIComponent(poData.totalPending || poData.totalRemaining || 0)}`}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-extrabold text-xs rounded-xl shadow-sm transition-all cursor-pointer active:scale-95"
+            >
+              <ArrowUpRight className="w-4 h-4" />
+              <span>Adjust Stock</span>
+            </Link>
+          )}
+
+          {/* VERIFY BUTTON */}
+          {canVerify && poData.verificationStatus !== "Verified" && (
+            <button
+              type="button"
+              onClick={handleModalVerify}
+              disabled={actionLoading}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white font-extrabold text-xs rounded-xl shadow-sm transition-all cursor-pointer disabled:opacity-50 active:scale-95"
+            >
+              {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+              <span>Verify Stock</span>
+            </button>
+          )}
+
+          {/* RE-CHECK BUTTON */}
+          {canVerify && poData.verificationStatus === "Verified" && poData.approvalStatus !== "Approved" && poData.approvalStatus !== "APPROVED" && (
+            <button
+              type="button"
+              onClick={handleModalVerify}
+              disabled={actionLoading}
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-stone-200 hover:bg-stone-300 text-stone-700 font-bold text-xs rounded-xl transition-all cursor-pointer disabled:opacity-50 active:scale-95"
+              title="Re-run stock verification"
+            >
+              {actionLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+              <span>Re-check Stock</span>
+            </button>
+          )}
+
+          {/* APPROVE BUTTON (works even if unverified or stock is not available) */}
+          {canApprove && poData.approvalStatus !== "Approved" && poData.approvalStatus !== "APPROVED" && (
+            <button
+              type="button"
+              onClick={handleModalApprove}
+              disabled={actionLoading}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-xs rounded-xl shadow-sm transition-all cursor-pointer disabled:opacity-50 active:scale-95"
+              title="Approve Purchase Order (clears even if stock is not available)"
+            >
+              {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserCheck className="w-4 h-4" />}
+              <span>Approve PO</span>
+            </button>
+          )}
+
+          {/* APPROVED BADGE */}
+          {(poData.approvalStatus === "Approved" || poData.approvalStatus === "APPROVED") && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-black rounded-xl">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <span>Approved</span>
+            </span>
+          )}
+
+          {/* CLOSE VIEW BUTTON */}
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-white hover:bg-stone-100 border border-stone-300 text-stone-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+          >
+            Close View
+          </button>
+        </div>
       </div>
     </div>
   );

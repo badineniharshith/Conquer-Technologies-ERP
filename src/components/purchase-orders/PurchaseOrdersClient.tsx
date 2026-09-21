@@ -39,8 +39,12 @@ import {
   DollarSign,
   BadgeIndianRupee,
   Hash,
-  RefreshCw
+  RefreshCw,
+  FileText,
+  ArrowUpRight,
+  PlusCircle
 } from "lucide-react";
+import Link from "next/link";
 import SearchableDropdown from "@/components/ui/SearchableDropdown";
 import { motion, AnimatePresence, AnimatedModal, StaggerContainer, StaggerItem } from "@/components/ui/motion";
 import UnifiedPOAutoChecker from "./UnifiedPOAutoChecker";
@@ -77,6 +81,57 @@ export default function PurchaseOrdersClient({
   
   // Real-time PO Audit Modal state
   const [selectedAuditPoId, setSelectedAuditPoId] = useState<string | null>(null);
+  const [poSearchInput, setPoSearchInput] = useState("");
+  const [searchedPoData, setSearchedPoData] = useState<any | null>(null);
+  const [isSearchingPo, setIsSearchingPo] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  // Handle PO Number Lookup & Full Audit Details Fetch
+  const handleSearchPO = useCallback(async (overrideTerm?: string) => {
+    const term = (overrideTerm !== undefined ? overrideTerm : poSearchInput).trim();
+    if (!term) {
+      setSearchedPoData(null);
+      setSearchError(null);
+      return;
+    }
+    setIsSearchingPo(true);
+    setSearchError(null);
+    try {
+      const res = await fetch(`/api/purchase-orders/audit/${encodeURIComponent(term)}`);
+      const json = await res.json();
+      if (json.success && json.data) {
+        setSearchedPoData(json.data);
+      } else {
+        // Fallback: check locally in initialPurchaseOrders
+        const found = initialPurchaseOrders.find(
+          p => p.poNumber.toLowerCase() === term.toLowerCase() || p.id.toLowerCase() === term.toLowerCase() || p.poNumber.toLowerCase().includes(term.toLowerCase())
+        );
+        if (found) {
+          const res2 = await fetch(`/api/purchase-orders/audit/${encodeURIComponent(found.poNumber)}`);
+          const json2 = await res2.json();
+          if (json2.success && json2.data) {
+            setSearchedPoData(json2.data);
+            return;
+          }
+        }
+        setSearchedPoData(null);
+        setSearchError(json.reason || `Purchase Order "${term}" not found.`);
+        toast.error(`Purchase Order "${term}" not found.`);
+      }
+    } catch (e: any) {
+      setSearchError("Failed to search Purchase Order.");
+      toast.error("Failed to load Purchase Order details.");
+    } finally {
+      setIsSearchingPo(false);
+    }
+  }, [poSearchInput, initialPurchaseOrders]);
+
+  const handleClearSearch = () => {
+    setPoSearchInput("");
+    setSearchedPoData(null);
+    setSearchError(null);
+  };
+
   const [newPoNumber, setNewPoNumber] = useState("");
   const [poLookupLoading, setPoLookupLoading] = useState(false);
   const [poLookupFound, setPoLookupFound] = useState(false);
@@ -108,8 +163,39 @@ export default function PurchaseOrdersClient({
   // Filter customers for dropdown
   const customers = useMemo(() => users.filter(u => u.roleId === "CUSTOMER"), [users]);
 
-  const isStaff = ["SUPER_ADMIN", "ADMIN", "EMPLOYEE", "SALES_HEAD", "REGIONAL_SALES_MANAGER", "BRANCH_MANAGER", "SALES_MANAGER", "SALES_EXECUTIVE"].includes(activeRole);
-  const isCustomer = activeRole === "CUSTOMER";
+  // Internal staff roles that can manage / verify POs
+  const effectiveRole = activeRole || (typeof activeUser?.role === 'string' ? activeUser.role : (activeUser as any)?.role?.name) || (activeUser as any)?.roleId || "";
+  const isStaff = [
+    "SUPER_ADMIN",
+    "ADMIN",
+    "DIRECTOR_OPERATIONS",
+    "OPERATIONS_MANAGER",
+    "ASSISTANT_MANAGER",
+    "OPERATIONS_EXECUTIVE",
+    "EMPLOYEE",
+    "BRANCH_MANAGER",
+    "SALES_HEAD",
+    "REGIONAL_SALES_MANAGER",
+    "SALES_MANAGER",
+    "SALES_EXECUTIVE"
+  ].includes(effectiveRole);
+
+  const canVerify = isStaff;
+
+  // Management & Operations staff authorized to approve POs
+  const canApprove = [
+    "SUPER_ADMIN",
+    "ADMIN",
+    "DIRECTOR_OPERATIONS",
+    "OPERATIONS_MANAGER",
+    "ASSISTANT_MANAGER",
+    "OPERATIONS_EXECUTIVE",
+    "BRANCH_MANAGER",
+    "SALES_HEAD",
+    "REGIONAL_SALES_MANAGER"
+  ].includes(effectiveRole);
+
+  const isCustomer = effectiveRole === "CUSTOMER";
 
   // Apply Role-Based Data Isolation
   const filteredPurchaseOrders = useMemo(() => {
@@ -412,18 +498,390 @@ export default function PurchaseOrdersClient({
               )}
               <span>{crmSyncing ? "Syncing from CRM..." : "Sync from CRM"}</span>
             </motion.button>
-            <motion.button
-              onClick={handleOpenCreateModal}
-              whileHover={{ scale: 1.02, y: -1 }}
-              whileTap={{ scale: 0.97 }}
-              className="px-4 py-2.5 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-bold text-xs rounded-xl shadow-md shadow-orange-500/15 transition-all flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
-            >
-              <Plus className="w-4 h-4" />
-              <span>New Purchase Order</span>
-            </motion.button>
           </div>
         )}
       </motion.div>
+
+      {/* Prominent Search PO Bar */}
+      <div className="bg-gradient-to-r from-orange-500/10 via-amber-500/5 to-transparent border border-orange-200/80 p-4 rounded-2xl shadow-sm space-y-2">
+        <div className="flex flex-col sm:flex-row gap-2.5 items-center">
+          <div className="relative flex-1 w-full">
+            <Search className="w-4 h-4 text-orange-500 absolute left-3.5 top-3.5" />
+            <input
+              type="text"
+              value={poSearchInput}
+              onChange={(e) => setPoSearchInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  handleSearchPO();
+                }
+              }}
+              placeholder="Enter PO Number (e.g. PO-002)..."
+              className="w-full pl-10 pr-9 py-2.5 bg-white border border-stone-300 rounded-xl text-xs font-bold text-stone-900 placeholder-stone-400 focus:outline-none focus:border-orange-500 shadow-xs"
+            />
+            {poSearchInput && (
+              <button
+                onClick={handleClearSearch}
+                className="absolute right-3 top-3 text-stone-400 hover:text-stone-700 cursor-pointer"
+                title="Clear search"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <button
+              onClick={() => handleSearchPO()}
+              disabled={isSearchingPo}
+              className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-black text-xs rounded-xl shadow-md shadow-orange-500/15 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60 transition-all"
+            >
+              {isSearchingPo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+              <span>Search PO</span>
+            </button>
+            {searchedPoData && (
+              <button
+                onClick={handleClearSearch}
+                className="px-3.5 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs rounded-xl transition-all cursor-pointer"
+              >
+                Clear Details
+              </button>
+            )}
+          </div>
+        </div>
+        {searchError && (
+          <div className="text-xs text-rose-600 font-semibold flex items-center gap-1.5 pt-1">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+            <span>{searchError}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Searched PO: Complete Details Card */}
+      {searchedPoData && (
+        <div className="bg-white border-2 border-orange-300 rounded-2xl shadow-lg p-6 space-y-6 animate-in fade-in slide-in-from-top-4 duration-200">
+          {/* Top Bar: PO info & Action Buttons */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-stone-200">
+            <div>
+              <div className="flex items-center space-x-2.5 flex-wrap gap-y-1">
+                <span className="font-mono text-2xl font-black text-stone-950">
+                  {searchedPoData.poNumber}
+                </span>
+                <span className={`inline-flex items-center gap-1 text-[11px] font-black uppercase px-3 py-1 rounded-full border ${
+                  searchedPoData.stockStatus === "STOCK ADJUSTED & ASSIGNED"
+                    ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                    : searchedPoData.stockStatus === "ASSIGNED"
+                    ? "bg-teal-50 text-teal-800 border-teal-200"
+                    : searchedPoData.stockStatus === "PARTIALLY ASSIGNED"
+                    ? "bg-amber-50 text-amber-800 border-amber-300"
+                    : "bg-rose-50 text-rose-700 border-rose-200"
+                }`}>
+                  {searchedPoData.stockStatus === "STOCK ADJUSTED & ASSIGNED" ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  ) : searchedPoData.stockStatus === "ASSIGNED" ? (
+                    <Package className="w-4 h-4 text-teal-600" />
+                  ) : searchedPoData.stockStatus === "PARTIALLY ASSIGNED" ? (
+                    <AlertTriangle className="w-4 h-4 text-amber-600" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-rose-500" />
+                  )}
+                  <span>{searchedPoData.stockStatus}</span>
+                </span>
+              </div>
+              <p className="text-xs text-stone-500 mt-1">
+                Created on {new Date(searchedPoData.dateReceived || Date.now()).toLocaleDateString("en-IN", {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric"
+                })} • Branch: <strong className="text-stone-800">{searchedPoData.branchCode}</strong>
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Verify PO Button (works even if stock is not available) */}
+              {canVerify && searchedPoData.verificationStatus !== "Verified" && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await handleVerifyStock(searchedPoData.id || searchedPoData.poNumber);
+                    await handleSearchPO(searchedPoData.poNumber);
+                  }}
+                  disabled={actionLoadingId === searchedPoData.id}
+                  className="px-3.5 py-2.5 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white font-extrabold text-xs rounded-xl shadow-sm transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95"
+                  title="Verify PO even if stock is not available"
+                >
+                  {actionLoadingId === searchedPoData.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+                  <span>Verify Stock</span>
+                </button>
+              )}
+
+              {/* Approve PO Button (works even if stock is not available) */}
+              {canApprove && searchedPoData.approvalStatus !== "Approved" && searchedPoData.approvalStatus !== "APPROVED" && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await handleApprovePo(searchedPoData.id || searchedPoData.poNumber);
+                    await handleSearchPO(searchedPoData.poNumber);
+                  }}
+                  disabled={actionLoadingId === searchedPoData.id}
+                  className="px-3.5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-xs rounded-xl shadow-sm transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95"
+                  title="Approve PO even if stock is not available"
+                >
+                  {actionLoadingId === searchedPoData.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserCheck className="w-4 h-4" />}
+                  <span>Approve PO</span>
+                </button>
+              )}
+
+              {(searchedPoData.approvalStatus === "Approved" || searchedPoData.approvalStatus === "APPROVED") && (
+                <span className="px-3 py-2 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-black flex items-center gap-1">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>Approved</span>
+                </span>
+              )}
+
+              {/* Go to Stock Adjustment Button */}
+              {(() => {
+                const firstPending = searchedPoData.lineItems?.find((i: any) => (i.pendingQty || i.remainingQty || 0) > 0) || searchedPoData.lineItems?.[0];
+                const pQty = firstPending ? (firstPending.pendingQty ?? firstPending.remainingQty ?? 0) : 0;
+                return (
+                  <button
+                    onClick={() => {
+                      router.push(`/stock-movement?action=adjust&poId=${encodeURIComponent(searchedPoData.poNumber)}&sku=${encodeURIComponent(firstPending?.sku || "")}&pending=${pQty}`);
+                    }}
+                    className="px-4 py-2.5 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-black text-xs rounded-xl shadow-md shadow-orange-500/15 transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <PlusCircle className="w-4 h-4" />
+                    <span>Adjust Stock</span>
+                  </button>
+                );
+              })()}
+
+              <button
+                onClick={() => setSelectedAuditPoId(searchedPoData.poNumber)}
+                className="px-3.5 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+              >
+                Printable Breakdown
+              </button>
+              <button
+                onClick={handleClearSearch}
+                className="p-2 hover:bg-stone-100 text-stone-400 hover:text-stone-700 rounded-xl cursor-pointer"
+                title="Close Details"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Meta Grid: Customer, Logistics, Handlers */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-stone-50 p-4 rounded-xl border border-stone-200 text-xs">
+            <div>
+              <span className="text-[10px] uppercase font-bold text-stone-400 block">Customer / Company</span>
+              <span className="font-extrabold text-stone-900 text-sm block mt-0.5">
+                {searchedPoData.companyName || searchedPoData.customerName || "Walk-in Customer"}
+              </span>
+              <span className="text-stone-500 text-[11px] block mt-0.5">
+                GSTIN: {searchedPoData.gstNumber || "N/A"}
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] uppercase font-bold text-stone-400 block">Contact & Logistics</span>
+              <span className="font-bold text-stone-800 text-xs block mt-0.5">
+                {searchedPoData.primaryContactName || searchedPoData.customerName}
+              </span>
+              <span className="text-stone-500 text-[11px] block mt-0.5">
+                {searchedPoData.email || searchedPoData.phone || "No direct phone"}
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] uppercase font-bold text-stone-400 block">Workflow Verification</span>
+              <span className="font-bold text-stone-800 text-xs block mt-0.5">
+                Verification: <strong className="text-stone-900">{searchedPoData.verificationStatus || "Pending"}</strong>
+              </span>
+              <span className="text-stone-500 text-[11px] block mt-0.5">
+                Verified by: {searchedPoData.verifiedBy || "Operations Team"}
+              </span>
+            </div>
+          </div>
+
+          {/* Product Allocation Breakdown Table */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-black uppercase tracking-wider text-stone-900 flex items-center gap-1.5">
+                <Package className="w-4 h-4 text-orange-500" />
+                <span>Product Stock Allocation Breakdown</span>
+              </h4>
+              <span className="text-[11px] text-stone-400 font-semibold">
+                {searchedPoData.lineItems?.length || 0} product line(s)
+              </span>
+            </div>
+
+            <div className="overflow-x-auto border border-stone-200 rounded-xl">
+              <table className="w-full text-xs text-left border-collapse">
+                <thead>
+                  <tr className="bg-stone-50 text-stone-600 font-extrabold uppercase text-[10px] tracking-wider border-b border-stone-200">
+                    <th className="px-3.5 py-2.5">Product & SKU</th>
+                    <th className="px-3.5 py-2.5 text-center">Requested</th>
+                    <th className="px-3.5 py-2.5 text-center">Available at Creation</th>
+                    <th className="px-3.5 py-2.5 text-center">Initially Assigned</th>
+                    <th className="px-3.5 py-2.5 text-center">Additional Stock</th>
+                    <th className="px-3.5 py-2.5 text-center">Assigned After Adjustment</th>
+                    <th className="px-3.5 py-2.5 text-center">Total Assigned</th>
+                    <th className="px-3.5 py-2.5 text-center">Pending</th>
+                    <th className="px-3.5 py-2.5 text-center">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100">
+                  {searchedPoData.lineItems?.map((item: any) => {
+                    const reqQty = Number(item.requestedQty || 0);
+                    const initAvail = Number(item.initialAvailableStock || 0);
+                    const initAssigned = Number(item.initialAssignedQty || 0);
+                    const addStock = Number(item.adjustedQty || 0);
+                    const addAssigned = Number(item.adjustedQty || 0);
+                    const totalAssigned = Number(item.allocatedQty || 0);
+                    const pendingQty = Number(item.pendingQty ?? item.remainingQty ?? 0);
+
+                    return (
+                      <tr key={item.id || item.sku} className="hover:bg-stone-50/70">
+                        <td className="px-3.5 py-3">
+                          <div className="font-extrabold text-stone-900">{item.name}</div>
+                          <div className="font-mono text-[10px] text-orange-650 font-bold">SKU: {item.sku}</div>
+                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-800 font-extrabold border border-blue-200">
+                              {initAssigned} units — Assigned at PO Creation
+                            </span>
+                            {addAssigned > 0 && (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 font-extrabold border border-emerald-200">
+                                {addAssigned} units — Assigned through Stock Adjustment
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-3.5 py-3 text-center font-bold text-stone-900 font-mono">
+                          {reqQty}
+                        </td>
+                        <td className="px-3.5 py-3 text-center font-mono text-stone-600 font-medium">
+                          {initAvail}
+                        </td>
+                        <td className="px-3.5 py-3 text-center font-mono font-extrabold text-blue-700 bg-blue-50/40">
+                          {initAssigned}
+                        </td>
+                        <td className="px-3.5 py-3 text-center font-mono text-stone-700">
+                          {addStock > 0 ? `+${addStock}` : "0"}
+                        </td>
+                        <td className="px-3.5 py-3 text-center font-mono font-extrabold text-emerald-700 bg-emerald-50/40">
+                          {addAssigned > 0 ? `+${addAssigned}` : "0"}
+                        </td>
+                        <td className="px-3.5 py-3 text-center font-mono font-black text-stone-950 text-xs">
+                          {totalAssigned}
+                        </td>
+                        <td className="px-3.5 py-3 text-center font-mono">
+                          {pendingQty > 0 ? (
+                            <span className="font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                              {pendingQty}
+                            </span>
+                          ) : (
+                            <span className="font-bold text-emerald-700">0</span>
+                          )}
+                        </td>
+                        <td className="px-3.5 py-3 text-center">
+                          <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-black uppercase border ${
+                            pendingQty === 0 && addAssigned > 0
+                              ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                              : pendingQty === 0
+                              ? "bg-teal-50 text-teal-800 border-teal-200"
+                              : totalAssigned > 0
+                              ? "bg-amber-50 text-amber-800 border-amber-300"
+                              : "bg-rose-50 text-rose-700 border-rose-200"
+                          }`}>
+                            {pendingQty === 0 && addAssigned > 0
+                              ? "✓ STOCK ADJUSTED & ASSIGNED"
+                              : pendingQty === 0
+                              ? "ASSIGNED"
+                              : totalAssigned > 0
+                              ? "PARTIALLY ASSIGNED"
+                              : "PENDING STOCK"}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Stock Allocation Timeline / History */}
+          <div className="space-y-3 pt-2">
+            <h4 className="text-xs font-black uppercase tracking-wider text-stone-900 flex items-center gap-1.5">
+              <Clock className="w-4 h-4 text-orange-500" />
+              <span>Stock Allocation History & Audit Timeline</span>
+            </h4>
+
+            <div className="bg-stone-50 p-4 rounded-xl border border-stone-200 space-y-4">
+              {/* 1. Initial Creation Event */}
+              <div className="flex items-start space-x-3 text-xs">
+                <div className="w-2.5 h-2.5 rounded-full bg-blue-500 mt-1 shrink-0 ring-4 ring-blue-100" />
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <strong className="text-stone-900">
+                      {new Date(searchedPoData.dateReceived || Date.now()).toLocaleDateString("en-IN", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric"
+                      })} — PO Created
+                    </strong>
+                    <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                      Initial Ingestion
+                    </span>
+                  </div>
+                  <div className="text-stone-600 text-[11px]">
+                    Requested: <strong className="text-stone-900">{searchedPoData.totalRequested}</strong> • Available stock at creation: <strong className="text-stone-900">{searchedPoData.totalAvailableAtCreation}</strong> • Initially Assigned: <strong className="text-blue-700">{searchedPoData.totalInitiallyAssigned}</strong> • Pending: <strong className="text-rose-600">{searchedPoData.totalPending}</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Adjustment Events */}
+              {searchedPoData.allocations && searchedPoData.allocations.length > 0 ? (
+                searchedPoData.allocations.map((alloc: any, idx: number) => {
+                  const allocTime = alloc.created_at ? new Date(alloc.created_at).toLocaleString("en-IN", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: true
+                  }) : "Recently";
+
+                  return (
+                    <div key={alloc.id || idx} className="flex items-start space-x-3 text-xs pt-3 border-t border-stone-200">
+                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 mt-1 shrink-0 ring-4 ring-emerald-100" />
+                      <div className="space-y-1 flex-1">
+                        <div className="flex items-center justify-between flex-wrap gap-1">
+                          <div className="flex items-center gap-2">
+                            <strong className="text-stone-900">{allocTime} — Stock Adjustment</strong>
+                            <span className="text-[10px] font-mono font-black text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                              {alloc.adjustment_number || "STOCK_ADJUSTMENT"}
+                            </span>
+                          </div>
+                          {alloc.adjusted_by && (
+                            <span className="text-[10px] text-stone-400 font-medium">By {alloc.adjusted_by}</span>
+                          )}
+                        </div>
+                        <div className="text-stone-600 text-[11px]">
+                          Stock added & allocated: <strong className="text-emerald-700">+{alloc.allocated_quantity} units</strong> • Product: <strong className="font-mono text-stone-900">{alloc.sku}</strong> • Reason: <span className="italic">{alloc.adjustment_reason || "Stock allocated for customer PO"}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="text-stone-400 text-xs italic pl-5">
+                  No subsequent stock adjustments recorded yet for this Purchase Order.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Filters (only for Staff roles) */}
       {isStaff && (
@@ -473,9 +931,30 @@ export default function PurchaseOrdersClient({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
             { label: "Total POs", value: filteredPurchaseOrders.length, color: "orange", icon: ClipboardList },
-            { label: "Pending", value: filteredPurchaseOrders.filter(po => po.verificationStatus === "Pending").length, color: "amber", icon: Clock },
-            { label: "Verified", value: filteredPurchaseOrders.filter(po => po.verificationStatus === "Verified").length, color: "emerald", icon: CheckCircle2 },
-            { label: "Stock Issues", value: filteredPurchaseOrders.filter(po => po.stockStatus === "Insufficient").length, color: "rose", icon: AlertTriangle }
+            { 
+              label: "Pending Stock", 
+              value: filteredPurchaseOrders.filter(po => 
+                po.stockStatus === "PENDING_STOCK" || po.stockStatus === "PENDING STOCK" || po.stockStatus === "Insufficient" || (po.poItems && po.poItems.some((i: any) => (i.remainingQuantity || 0) > 0))
+              ).length, 
+              color: "rose", 
+              icon: AlertTriangle 
+            },
+            { 
+              label: "Adjusted & Assigned", 
+              value: filteredPurchaseOrders.filter(po => 
+                po.stockStatus === "STOCK ADJUSTED & ASSIGNED" || po.stockStatus === "Stock Adjusted"
+              ).length, 
+              color: "emerald", 
+              icon: CheckCircle2 
+            },
+            { 
+              label: "Fully Assigned", 
+              value: filteredPurchaseOrders.filter(po => 
+                po.stockStatus === "ASSIGNED" || po.stockStatus === "Available"
+              ).length, 
+              color: "teal", 
+              icon: Package 
+            }
           ].map(stat => (
             <div key={stat.label} className={`bg-white border border-stone-200 rounded-xl p-4 flex items-center gap-3`}>
               <div className={`w-9 h-9 rounded-lg bg-${stat.color}-50 flex items-center justify-center shrink-0`}>
@@ -504,17 +983,19 @@ export default function PurchaseOrdersClient({
               <th className="px-5 py-3">Customer</th>
               {isStaff && <th className="px-5 py-3">Company</th>}
               <th className="px-5 py-3">Products</th>
-              <th className="px-5 py-3 text-center">Qty</th>
+              <th className="px-3 py-3 text-center">Requested</th>
+              <th className="px-3 py-3 text-center">Assigned</th>
+              <th className="px-3 py-3 text-center">Pending</th>
               <th className="px-5 py-3">Order Date</th>
-              {isStaff && <th className="px-5 py-3">Expected Delivery</th>}
-              <th className="px-5 py-3 text-center">Status</th>
-              {isStaff && <th className="px-5 py-3 text-center">Actions</th>}
+              <th className="px-5 py-3 text-center">Stock Status</th>
+              <th className="px-5 py-3 text-center">Verification</th>
+              <th className="px-5 py-3 text-center">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-stone-100">
             {filteredPurchaseOrders.length === 0 ? (
               <tr>
-                <td colSpan={isStaff ? 9 : 6} className="px-6 py-16 text-center text-stone-400 italic">
+                <td colSpan={isStaff ? 11 : 8} className="px-6 py-16 text-center text-stone-400 italic">
                   <div className="flex flex-col items-center space-y-2">
                     <ClipboardList className="w-8 h-8 text-stone-300" />
                     <span>
@@ -529,20 +1010,61 @@ export default function PurchaseOrdersClient({
               filteredPurchaseOrders.map((po, idx) => {
                 const isLoading = actionLoadingId === po.id;
                 const isVerified = po.verificationStatus === "Verified";
+                const isApproved = po.approvalStatus === "Approved" || po.approvalStatus === "APPROVED";
+                
+                const poItems = po.poItems || [];
                 let items: { sku: string; quantity: number }[] = [];
                 try { items = JSON.parse(po.itemsJson || "[]"); } catch {}
-                const totalQty = items.reduce((s, i) => s + i.quantity, 0);
+                
+                // Compute requested, assigned, pending quantities
+                let requestedQty = 0;
+                let assignedQty = 0;
+                let pendingQty = 0;
+
+                if (poItems.length > 0) {
+                  for (const pi of poItems) {
+                    const req = Number(pi.quantity || 1);
+                    const alloc = Number(pi.allocatedQuantity || 0);
+                    const rem = Number(pi.remainingQuantity ?? Math.max(0, req - alloc));
+                    requestedQty += req;
+                    assignedQty += alloc;
+                    pendingQty += rem;
+                  }
+                } else if (items.length > 0) {
+                  requestedQty = items.reduce((s, i) => s + (Number(i.quantity) || 0), 0);
+                  if (po.stockStatus === "ASSIGNED" || po.stockStatus === "STOCK ADJUSTED & ASSIGNED" || po.stockStatus === "Stock Adjusted" || po.stockStatus === "Available") {
+                    assignedQty = requestedQty;
+                    pendingQty = 0;
+                  } else {
+                    assignedQty = 0;
+                    pendingQty = requestedQty;
+                  }
+                }
 
                 return (
                   <tr key={po.id} className="table-row-hover animate-fade-in-up" style={{ animationDelay: `${idx * 0.04}s`, animationFillMode: 'both' }}>
                     <td className="px-5 py-4 font-mono font-black text-orange-655 text-sm">
-                      <button
-                        onClick={() => setSelectedAuditPoId(po.id)}
-                        className="font-black text-left text-orange-655 hover:underline hover:text-orange-700 cursor-pointer transition-colors focus:outline-none"
-                        title="Click to view Customer Order, Discounts, Stock Allocation & Printable PDF"
-                      >
-                        {po.poNumber}
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => setSelectedAuditPoId(po.id)}
+                          className="font-black text-left text-orange-655 hover:underline hover:text-orange-700 cursor-pointer transition-colors focus:outline-none"
+                          title="Click to view Customer Order, Discounts, Stock Allocation & Printable PDF"
+                        >
+                          {po.poNumber}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPoSearchInput(po.poNumber);
+                            handleSearchPO(po.poNumber);
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }}
+                          className="p-1 text-stone-400 hover:text-orange-600 hover:bg-orange-50 rounded transition-colors"
+                          title="Inspect Allocation Details above"
+                        >
+                          <Search className="w-3 h-3" />
+                        </button>
+                      </div>
                     </td>
                     <td className="px-5 py-4">
                       <div className="font-bold text-stone-900">{po.customerName}</div>
@@ -555,110 +1077,200 @@ export default function PurchaseOrdersClient({
                     )}
                     <td className="px-5 py-4">
                       <div className="flex flex-col gap-0.5">
-                        {items.slice(0, 2).map((item, i) => (
+                        {(poItems.length > 0 ? poItems : items).slice(0, 2).map((item: any, i: number) => (
                           <div key={i} className="flex items-center gap-1.5">
                             <Package className="w-3 h-3 text-stone-400 shrink-0" />
                             <span className="font-mono text-[10px] text-stone-600">{item.sku}</span>
                           </div>
                         ))}
-                        {items.length > 2 && (
-                          <span className="text-[10px] text-stone-400">+{items.length - 2} more</span>
+                        {(poItems.length > 0 ? poItems : items).length > 2 && (
+                          <span className="text-[10px] text-stone-400">+{(poItems.length > 0 ? poItems : items).length - 2} more</span>
                         )}
                       </div>
                     </td>
-                    <td className="px-5 py-4 text-center font-extrabold text-stone-800">{totalQty}</td>
+
+                    {/* Requested Qty */}
+                    <td className="px-3 py-4 text-center font-extrabold text-stone-900 text-xs">
+                      {requestedQty}
+                    </td>
+
+                    {/* Assigned Qty */}
+                    <td className="px-3 py-4 text-center font-extrabold text-xs">
+                      <span className="px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-700">
+                        {assignedQty}
+                      </span>
+                    </td>
+
+                    {/* Pending Qty */}
+                    <td className="px-3 py-4 text-center font-extrabold text-xs">
+                      {pendingQty > 0 ? (
+                        <span className="px-2 py-0.5 rounded-md bg-rose-50 border border-rose-200 text-rose-700">
+                          {pendingQty}
+                        </span>
+                      ) : (
+                        <span className="text-stone-400 font-mono">0</span>
+                      )}
+                    </td>
+
                     <td className="px-5 py-4 text-stone-500 font-medium">
                       <div className="flex items-center space-x-1.5">
                         <Calendar className="w-3.5 h-3.5 text-stone-400" />
                         <span>{new Date(po.dateReceived).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                       </div>
                     </td>
-                    {isStaff && (
-                      <td className="px-5 py-4 text-stone-500 font-medium">
-                        {po.expectedDelivery ? (
-                          <div className="flex items-center space-x-1.5">
-                            <Truck className="w-3.5 h-3.5 text-orange-400" />
-                            <span>{new Date(po.expectedDelivery).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                          </div>
-                        ) : (
-                          <span className="text-stone-300 italic text-[10px]">Not set</span>
-                        )}
-                      </td>
-                    )}
+
+                    {/* Stock Status Column */}
                     <td className="px-5 py-4 text-center">
                       <div className="flex flex-col items-center gap-1">
-                        <span className={`inline-flex items-center gap-1 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${getVerifyBadge(po.verificationStatus)}`}>
-                          {isVerified ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                          Verify: {po.verificationStatus}
-                        </span>
-                        <span className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase px-2 py-0.5 rounded-full ${
-                          po.approvalStatus === 'Approved' || po.approvalStatus === 'APPROVED'
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : 'bg-amber-50 text-amber-700 border border-amber-200'
-                        }`}>
-                          Approve: {po.approvalStatus || 'Pending Approval'}
-                        </span>
+                        {(po.stockStatus === "STOCK ADJUSTED & ASSIGNED" || po.stockStatus === "Stock Adjusted") ? (
+                          <div className="flex flex-col items-center">
+                            <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-xs">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              <span>✓ Stock Adjusted & Assigned</span>
+                            </span>
+                            {po.lastAdjustmentNumber && (
+                              <span className="text-[8px] font-mono font-bold text-emerald-700 mt-0.5" title="Adjustment Reference">
+                                {po.lastAdjustmentNumber}
+                              </span>
+                            )}
+                          </div>
+                        ) : (po.stockStatus === "PARTIALLY ASSIGNED / PENDING STOCK" || po.stockStatus === "Partially Stock Adjusted" || (assignedQty > 0 && pendingQty > 0)) ? (
+                          <div className="flex flex-col items-center">
+                            <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                              <AlertTriangle className="w-3 h-3 text-amber-600" />
+                              <span>Partially Assigned</span>
+                            </span>
+                            <span className="text-[8px] font-bold text-amber-700 mt-0.5">
+                              {pendingQty} Pending
+                            </span>
+                          </div>
+                        ) : (po.stockStatus === "ASSIGNED" || po.stockStatus === "Available" || (requestedQty > 0 && assignedQty === requestedQty)) ? (
+                          <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <CheckCircle className="w-3 h-3 text-emerald-600" />
+                            <span>ASSIGNED</span>
+                          </span>
+                        ) : (
+                          <div className="flex flex-col items-center">
+                            <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
+                              <AlertCircle className="w-3 h-3 text-rose-600" />
+                              <span>PENDING STOCK</span>
+                            </span>
+                            {pendingQty > 0 && (
+                              <span className="text-[8px] font-bold text-rose-700 mt-0.5">
+                                {pendingQty} Shortage
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </td>
-                    {isStaff && (
-                      <td className="px-5 py-4 text-center">
-                        <div className="flex items-center justify-center gap-2">
+
+                    {/* Verification Status Column */}
+                    <td className="px-5 py-4 text-center">
+                      <div className="flex flex-col items-center gap-0.5">
+                        {isVerified ? (
+                          <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300" title={po.verifiedBy ? `Verified by ${po.verifiedBy} on ${po.verifiedDate ? new Date(po.verifiedDate).toLocaleString() : ''}` : 'Verified'}>
+                            <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                            <span>VERIFIED</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                            <Clock className="w-2.5 h-2.5 text-amber-600" />
+                            <span>PENDING</span>
+                          </span>
+                        )}
+                        {po.verifiedBy && (
+                          <span className="text-[8px] text-stone-400 font-medium truncate max-w-[100px]" title={`Verified by ${po.verifiedBy}`}>
+                            By: {po.verifiedBy}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Actions Column */}
+                    <td className="px-5 py-4 text-center">
+                      <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                        {/* 1. VERIFY BUTTON: shown when verification is Pending */}
+                        {canVerify && !isVerified && (
                           <button
                             type="button"
                             onClick={() => handleVerifyStock(po.id)}
-                            disabled={isLoading || isVerified}
-                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full font-extrabold text-[11px] transition-all cursor-pointer shadow-sm ${
-                              isVerified
-                                ? "bg-emerald-700 text-white border border-emerald-800 opacity-90 cursor-default"
-                                : "bg-[#8c3120] hover:bg-[#742718] text-white hover:shadow-md active:scale-95"
-                            } ${isLoading ? "opacity-70 cursor-not-allowed" : ""}`}
-                            style={{ color: "#ffffff", backgroundColor: isVerified ? "#047857" : "#8c3120" }}
-                            title={isVerified ? "Already Verified" : "Verify Stock Availability"}
+                            disabled={isLoading}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg font-black text-[11px] text-white bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 shadow-sm transition-all cursor-pointer disabled:opacity-50 active:scale-95"
+                            title="Verify stock availability against current ERP inventory"
                           >
                             {isLoading ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
-                            ) : isVerified ? (
-                              <>
-                                <CheckCircle2 className="w-3.5 h-3.5 text-white" />
-                                <span>Verified</span>
-                              </>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
                             ) : (
-                              <>
-                                <ShieldCheck className="w-3.5 h-3.5 text-white" />
-                                <span>Verify</span>
-                              </>
+                              <ShieldCheck className="w-3.5 h-3.5" />
                             )}
+                            <span>Verify</span>
                           </button>
+                        )}
 
+                        {/* 2. APPROVE BUTTON: shown when Approval is Pending (works whether stock is available or not) */}
+                        {canApprove && !isApproved && (
                           <button
                             type="button"
                             onClick={() => handleApprovePo(po.id)}
-                            disabled={isLoading || (po.approvalStatus === 'Approved' || po.approvalStatus === 'APPROVED')}
-                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full font-extrabold text-[11px] transition-all cursor-pointer shadow-sm ${
-                              (po.approvalStatus === 'Approved' || po.approvalStatus === 'APPROVED')
-                                ? "bg-emerald-700 text-white border border-emerald-800 opacity-90 cursor-default"
-                                : "bg-emerald-600 hover:bg-emerald-700 text-white hover:shadow-md active:scale-95"
-                            } ${isLoading ? "opacity-70 cursor-not-allowed" : ""}`}
-                            style={{ color: "#ffffff", backgroundColor: (po.approvalStatus === 'Approved' || po.approvalStatus === 'APPROVED') ? "#047857" : "#059669" }}
-                            title={(po.approvalStatus === 'Approved' || po.approvalStatus === 'APPROVED') ? "Already Approved" : "Approve Purchase Order"}
+                            disabled={isLoading}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg font-black text-[11px] text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-sm transition-all cursor-pointer disabled:opacity-50 active:scale-95"
+                            title="Approve Purchase Order (clears even if stock is not available)"
                           >
                             {isLoading ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
-                            ) : (po.approvalStatus === 'Approved' || po.approvalStatus === 'APPROVED') ? (
-                              <>
-                                <CheckCircle2 className="w-3.5 h-3.5 text-white" />
-                                <span>Approved</span>
-                              </>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
                             ) : (
-                              <>
-                                <UserCheck className="w-3.5 h-3.5 text-white" />
-                                <span>Approve</span>
-                              </>
+                              <UserCheck className="w-3.5 h-3.5" />
                             )}
+                            <span>Approve</span>
                           </button>
-                        </div>
-                      </td>
-                    )}
+                        )}
+
+                        {/* 3. APPROVED BADGE: shown when Approved */}
+                        {isApproved && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-black text-[10px] text-emerald-800 bg-emerald-50 border border-emerald-200">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                            <span>APPROVED</span>
+                          </span>
+                        )}
+
+                        {/* 4. RE-VERIFY ACTION: optional button to re-run check if stock changed */}
+                        {canVerify && isVerified && !isApproved && (
+                          <button
+                            type="button"
+                            onClick={() => handleVerifyStock(po.id)}
+                            disabled={isLoading}
+                            className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg transition-colors cursor-pointer"
+                            title="Re-verify stock"
+                          >
+                            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
+                          </button>
+                        )}
+
+                        {/* 5. ADJUST BUTTON: when pending stock exists */}
+                        {pendingQty > 0 && (
+                          <Link
+                            href={`/stock-movement?action=adjust&poId=${encodeURIComponent(po.id)}&sku=${encodeURIComponent(poItems[0]?.sku || items[0]?.sku || "")}&pending=${encodeURIComponent(pendingQty)}`}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg font-bold text-[11px] text-amber-700 hover:text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 transition-all cursor-pointer shadow-xs"
+                            title="Adjust Stock for this PO"
+                          >
+                            <ArrowUpRight className="w-3.5 h-3.5 text-amber-600" />
+                            <span>Adjust</span>
+                          </Link>
+                        )}
+
+                        {/* 6. VIEW BUTTON: always available */}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedAuditPoId(po.id)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg font-bold text-[11px] text-stone-600 hover:text-stone-900 bg-stone-100 hover:bg-stone-200 transition-all cursor-pointer"
+                          title="View Details, Pricing, & Print"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>View</span>
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 );
               })

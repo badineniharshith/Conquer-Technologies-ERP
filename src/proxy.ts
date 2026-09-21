@@ -7,17 +7,16 @@ import { erpDb } from "@/lib/db";
 // Next.js Proxy — Server-Side Auth & Role-Based Route Guard
 // ============================================================
 
-// The ONLY 5 Roles allowed to access ERP Stock, Inventory & Procurement pages.
-// These must match the `name` field in the `roles` table exactly.
+// Only Operations Team and Admin roles can access ERP.
+// All other roles (Sales, Presales, Marketing, etc.) are restricted to CRM.
 const ERP_ALLOWED_ROLES = [
   "SUPER_ADMIN",
   "ADMIN",
+  "MANAGING_DIRECTOR",
   "DIRECTOR_OPERATIONS",
   "OPERATIONS_MANAGER",
   "ASSISTANT_MANAGER",
-  "OPERATIONS_EXECUTIVE",
-  "CUSTOMER",
-  "EMPLOYEE"
+  "OPERATIONS_EXECUTIVE"
 ];
 
 // ERP routes restricted strictly to the 5 ERP Roles
@@ -33,8 +32,20 @@ const ERP_ROUTES = [
   "/settings"
 ];
 
+// Customer Portal routes — accessible to CUSTOMER role
+const CUSTOMER_ALLOWED_ROUTES = [
+  "/dashboard",
+  "/allocated-stock",
+  "/orders",
+  "/products",
+  "/categories",
+  "/assets-warranties",
+  "/assign-users",
+  "/profile"
+];
+
 // Public & system routes
-const PUBLIC_PAGES = ["/login", "/register"];
+const PUBLIC_PAGES = ["/login", "/register", "/sso-callback"];
 const ALWAYS_ALLOWED = ["/logout", "/403"];
 
 export async function proxy(req: NextRequest) {
@@ -54,7 +65,7 @@ export async function proxy(req: NextRequest) {
 
   // 2. Public pages
   if (PUBLIC_PAGES.includes(pathname)) {
-    if (token) {
+    if (token && pathname !== "/sso-callback") {
       const payload = await verifyJwt(token);
       if (payload) {
         return NextResponse.redirect(new URL("/dashboard", req.url));
@@ -84,12 +95,7 @@ export async function proxy(req: NextRequest) {
     return response;
   }
 
-  // 5. Root "/" → dashboard
-  if (pathname === "/") {
-    return NextResponse.redirect(new URL("/dashboard", req.url));
-  }
-
-  // 6. Always-allowed pages
+  // 5. Always-allowed pages (e.g. /403, /logout)
   if (ALWAYS_ALLOWED.includes(pathname)) {
     return NextResponse.next();
   }
@@ -98,18 +104,35 @@ export async function proxy(req: NextRequest) {
   // IMPORTANT: ERP roles use UUID roleIds in the DB, so we must use role.name not roleId.
   const roleName = (user as any).role?.name || (payload.role as string) || user.roleId;
 
-  // Check if requested route is an ERP route
-  const isErpRoute = ERP_ROUTES.some(r => pathname === r || pathname.startsWith(r + "/"));
+  const isErpRole = ERP_ALLOWED_ROLES.includes(roleName);
+  const isCustomer = roleName === "CUSTOMER";
 
-  if (isErpRoute) {
-    const isErpRole = ERP_ALLOWED_ROLES.includes(roleName);
-    if (!isErpRole) {
-      // Redirect non-ERP roles and customers to CRM dashboard
-      return NextResponse.redirect(new URL("/admin/customers", req.url));
+  // 6. Route access enforcement
+  if (isErpRole) {
+    // ERP roles can access everything
+    if (pathname === "/") {
+      return NextResponse.redirect(new URL("/dashboard", req.url));
     }
+    return NextResponse.next();
   }
 
-  return NextResponse.next();
+  if (isCustomer) {
+    // Customer role: allow customer portal routes, /dashboard, and root
+    if (pathname === "/") {
+      return NextResponse.redirect(new URL("/dashboard", req.url));
+    }
+    const isAllowed = CUSTOMER_ALLOWED_ROUTES.some(
+      (route) => pathname === route || pathname.startsWith(route + "/")
+    );
+    if (isAllowed) {
+      return NextResponse.next();
+    }
+    // Customer trying to access ERP-only routes → 403
+    return NextResponse.redirect(new URL("/403", req.url));
+  }
+
+  // 7. Non-ERP, non-customer roles → 403
+  return NextResponse.redirect(new URL("/403", req.url));
 }
 
 export const config = {
@@ -117,6 +140,3 @@ export const config = {
     "/((?!api|_next/static|_next/image|favicon.ico).*)",
   ],
 };
-
-export { proxy as middleware };
-export default proxy;
