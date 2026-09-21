@@ -158,6 +158,8 @@ const normalizePoRecord = (po: any) => {
     grandTotal: po.grandTotal !== undefined && po.grandTotal !== null ? Number(po.grandTotal) : null,
     poStatus: po.poStatus || po.po_status || "PENDING",
     approvalStatus: po.approvalStatus || po.approval_status || "PENDING",
+    approvedBy: po.approvedBy || po.approved_by || null,
+    approvedDate: po.approvedDate || po.approved_date || po.approved_at || null,
     user: po.user || null,
     vendor: po.vendor || null,
     poItems: po.poItems || []
@@ -838,12 +840,17 @@ export const erpDb = {
     findUnique: async (args: { where: { id?: string | number; poNumber?: string } }) => {
       if (isDatabaseConnected()) {
         try {
-          const whereClause: any = {};
-          if (args.where.id) whereClause.id = String(args.where.id);
-          if (args.where.poNumber) whereClause.poNumber = args.where.poNumber;
+          const conditions: any[] = [];
+          if (args.where.id) {
+            conditions.push({ id: String(args.where.id) });
+            conditions.push({ poNumber: String(args.where.id) });
+          }
+          if (args.where.poNumber) {
+            conditions.push({ poNumber: args.where.poNumber });
+          }
 
           const dbPo = await prisma.purchaseOrder.findFirst({
-            where: whereClause,
+            where: conditions.length > 1 ? { OR: conditions } : conditions[0] || {},
             include: {
               customer: true,
               vendor: true,
@@ -853,10 +860,12 @@ export const erpDb = {
             }
           });
           if (dbPo) return normalizePoRecord(dbPo);
-        } catch (e) {}
+        } catch (e: any) {
+          console.error("erpDb.purchaseOrders.findUnique error:", e?.message);
+        }
       }
       if (args.where.id) {
-        const found = mockStore.purchaseOrders.find(po => String(po.id) === String(args.where.id)) || null;
+        const found = mockStore.purchaseOrders.find(po => String(po.id) === String(args.where.id) || String(po.poNumber) === String(args.where.id)) || null;
         if (!found) return null;
         return normalizePoRecord({ ...found, user: mockStore.users.find(u => u.id === found.customerId) });
       }
@@ -875,25 +884,49 @@ export const erpDb = {
             include: { customer: true, vendor: true, poItems: true }
           });
           return normalizePoRecord(created);
-        } catch (e) {}
+        } catch (e: any) {
+          console.error("erpDb.purchaseOrders.create error:", e?.message);
+        }
       }
       const item = { id: `po-${Date.now()}`, dateReceived: new Date(), companyName: "", verifiedBy: null, verifiedDate: null, ...args.data };
       mockStore.purchaseOrders.push(item);
       return normalizePoRecord({ ...item, user: mockStore.users.find(u => u.id === item.customerId) });
     },
-    update: async (args: { where: { id: string | number }; data: any }) => {
+    update: async (args: { where: { id?: string | number; poNumber?: string }; data: any }) => {
       if (isDatabaseConnected()) {
         try {
-          const poId = String(args.where.id);
-          const updated = await prisma.purchaseOrder.update({
-            where: { id: poId },
-            data: args.data,
-            include: { customer: true, vendor: true, poItems: true }
-          });
-          return normalizePoRecord(updated);
-        } catch (e) {}
+          let targetId = args.where.id ? String(args.where.id) : undefined;
+          if (!targetId && args.where.poNumber) {
+            const found = await prisma.purchaseOrder.findFirst({
+              where: { poNumber: args.where.poNumber },
+              select: { id: true }
+            });
+            if (found) targetId = found.id;
+          }
+          if (targetId) {
+            const existing = await prisma.purchaseOrder.findFirst({
+              where: {
+                OR: [
+                  { id: targetId },
+                  { poNumber: targetId }
+                ]
+              },
+              select: { id: true }
+            });
+            const actualId = existing?.id || targetId;
+            const updated = await prisma.purchaseOrder.update({
+              where: { id: actualId },
+              data: args.data,
+              include: { customer: true, vendor: true, poItems: true }
+            });
+            return normalizePoRecord(updated);
+          }
+        } catch (e: any) {
+          console.error("erpDb.purchaseOrders.update error:", e?.message);
+        }
       }
-      const idx = mockStore.purchaseOrders.findIndex(x => String(x.id) === String(args.where.id));
+      const searchKey = String(args.where.id || args.where.poNumber);
+      const idx = mockStore.purchaseOrders.findIndex(x => String(x.id) === searchKey || String(x.poNumber) === searchKey);
       if (idx !== -1) {
         mockStore.purchaseOrders[idx] = { ...mockStore.purchaseOrders[idx], ...args.data };
         const po = mockStore.purchaseOrders[idx];

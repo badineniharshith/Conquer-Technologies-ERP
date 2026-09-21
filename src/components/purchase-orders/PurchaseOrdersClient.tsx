@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useMemo, useCallback } from "react";
+import { useState, useEffect, useTransition, useMemo, useCallback } from "react";
 import { useErpStore } from "@/lib/store";
 import { 
   checkStockAvailabilityAction, 
@@ -68,6 +68,12 @@ export default function PurchaseOrdersClient({
   const { activeRole, activeUser } = useErpStore();
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+
+  const [purchaseOrders, setPurchaseOrders] = useState<any[]>(initialPurchaseOrders);
+
+  useEffect(() => {
+    setPurchaseOrders(initialPurchaseOrders);
+  }, [initialPurchaseOrders]);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [branchFilter, setBranchFilter] = useState("All");
@@ -199,7 +205,7 @@ export default function PurchaseOrdersClient({
 
   // Apply Role-Based Data Isolation
   const filteredPurchaseOrders = useMemo(() => {
-    return initialPurchaseOrders.filter(po => {
+    return purchaseOrders.filter(po => {
       // 1. Customer role isolation: see own POs
       if (isCustomer) {
         return (
@@ -224,7 +230,7 @@ export default function PurchaseOrdersClient({
 
       return matchesBranch && matchesSearch && matchesStatus;
     });
-  }, [initialPurchaseOrders, isCustomer, activeUser, branchFilter, searchQuery, statusFilter]);
+  }, [purchaseOrders, isCustomer, activeUser, branchFilter, searchQuery, statusFilter]);
 
   // Handle PO Number auto-lookup
   const handlePoNumberLookup = useCallback(async () => {
@@ -304,6 +310,33 @@ export default function PurchaseOrdersClient({
         if (res.warning) {
           toast.warning(res.warning, { duration: 8000 });
         }
+
+        // Optimistically update searched PO card
+        setSearchedPoData((prev: any) => {
+          if (!prev) return null;
+          if (prev.id === poId || prev.poNumber === poId) {
+            return {
+              ...prev,
+              verificationStatus: "Verified",
+              erpVerificationStatus: "Verified"
+            };
+          }
+          return prev;
+        });
+
+        // Optimistically update table row
+        setPurchaseOrders((prev: any[]) =>
+          prev.map((item: any) =>
+            item.id === poId || item.poNumber === poId
+              ? {
+                  ...item,
+                  verificationStatus: "Verified",
+                  erpVerificationStatus: "Verified"
+                }
+              : item
+          )
+        );
+
         router.refresh();
       }
     } catch (e: any) {
@@ -321,6 +354,39 @@ export default function PurchaseOrdersClient({
         toast.error(res.error);
       } else {
         toast.success(`🎉 Purchase Order ${res.poNumber} has been approved and cleared!`);
+
+        // 1. Immediately update searched PO card if it's the approved PO
+        setSearchedPoData((prev: any) => {
+          if (!prev) return null;
+          if (prev.id === poId || prev.poNumber === poId || prev.poNumber === res.poNumber) {
+            return {
+              ...prev,
+              approvalStatus: "Approved",
+              poStatus: "Cleared",
+              verificationStatus: "Verified",
+              approvedBy: res.approvedBy || "Operations",
+              approvedDate: new Date().toISOString()
+            };
+          }
+          return prev;
+        });
+
+        // 2. Immediately update table row so it switches to APPROVED
+        setPurchaseOrders((prev: any[]) =>
+          prev.map((item: any) =>
+            item.id === poId || item.poNumber === poId || item.poNumber === res.poNumber
+              ? {
+                  ...item,
+                  approvalStatus: "Approved",
+                  poStatus: "Cleared",
+                  verificationStatus: "Verified",
+                  approvedBy: res.approvedBy || "Operations",
+                  approvedDate: new Date().toISOString()
+                }
+              : item
+          )
+        );
+
         router.refresh();
       }
     } catch (e: any) {
@@ -605,11 +671,11 @@ export default function PurchaseOrdersClient({
                     await handleVerifyStock(searchedPoData.id || searchedPoData.poNumber);
                     await handleSearchPO(searchedPoData.poNumber);
                   }}
-                  disabled={actionLoadingId === searchedPoData.id}
+                  disabled={actionLoadingId === searchedPoData.id || actionLoadingId === searchedPoData.poNumber}
                   className="px-3.5 py-2.5 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white font-extrabold text-xs rounded-xl shadow-sm transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95"
                   title="Verify PO even if stock is not available"
                 >
-                  {actionLoadingId === searchedPoData.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+                  {(actionLoadingId === searchedPoData.id || actionLoadingId === searchedPoData.poNumber) ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
                   <span>Verify Stock</span>
                 </button>
               )}
@@ -622,11 +688,11 @@ export default function PurchaseOrdersClient({
                     await handleApprovePo(searchedPoData.id || searchedPoData.poNumber);
                     await handleSearchPO(searchedPoData.poNumber);
                   }}
-                  disabled={actionLoadingId === searchedPoData.id}
+                  disabled={actionLoadingId === searchedPoData.id || actionLoadingId === searchedPoData.poNumber}
                   className="px-3.5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-xs rounded-xl shadow-sm transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95"
                   title="Approve PO even if stock is not available"
                 >
-                  {actionLoadingId === searchedPoData.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserCheck className="w-4 h-4" />}
+                  {(actionLoadingId === searchedPoData.id || actionLoadingId === searchedPoData.poNumber) ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserCheck className="w-4 h-4" />}
                   <span>Approve PO</span>
                 </button>
               )}

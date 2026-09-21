@@ -78,15 +78,21 @@ export default function PODetailsModal({ poIdentifier, onClose }: PODetailsModal
   };
 
   const handleModalVerify = async () => {
-    if (!poData?.id) return;
+    const targetId = poData?.id || poIdentifier;
+    if (!targetId) return;
     setActionLoading(true);
     try {
-      const res = await verifyPurchaseOrderAction(poData.id);
+      const res = await verifyPurchaseOrderAction(targetId);
       if (res.error) {
         toast.error(res.error);
       } else {
         toast.success(`✅ PO verified successfully! Stock status: ${(res as any).stockStatus || "Verified"}.`);
         if (res.warning) toast.warning(res.warning, { duration: 8000 });
+        setPoData((prev: any) => prev ? {
+          ...prev,
+          verificationStatus: "Verified",
+          erpVerificationStatus: "Verified"
+        } : null);
         await fetchPoDetails();
       }
     } catch (err: any) {
@@ -97,14 +103,24 @@ export default function PODetailsModal({ poIdentifier, onClose }: PODetailsModal
   };
 
   const handleModalApprove = async () => {
-    if (!poData?.id) return;
+    const targetId = poData?.id || poIdentifier;
+    if (!targetId) return;
     setActionLoading(true);
     try {
-      const res = await approvePurchaseOrderAction(poData.id);
+      const res = await approvePurchaseOrderAction(targetId);
       if (res.error) {
         toast.error(res.error);
       } else {
         toast.success(`🎉 Purchase Order ${res.poNumber} has been approved!`);
+        // Immediately update modal state so status switches to Approved without delay
+        setPoData((prev: any) => prev ? {
+          ...prev,
+          approvalStatus: "Approved",
+          poStatus: "Cleared",
+          verificationStatus: "Verified",
+          approvedBy: res.approvedBy || "Operations",
+          approvedDate: new Date().toISOString()
+        } : null);
         await fetchPoDetails();
       }
     } catch (err: any) {

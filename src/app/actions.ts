@@ -2469,7 +2469,26 @@ export async function approvePurchaseOrderAction(poId: string) {
   const approverName = performingUser?.name || (performingUser?.role?.name ? performingUser.role.name.replace(/_/g, " ") : "Operations Executive");
   const performedBy = performingUser?.id || "system";
 
-  const po = await erpDb.purchaseOrders.findUnique({ where: { id: poId } });
+  // Robust lookup by id or poNumber
+  let po: any = await erpDb.purchaseOrders.findUnique({ where: { id: poId } });
+  if (!po) {
+    po = await erpDb.purchaseOrders.findUnique({ where: { poNumber: poId } });
+  }
+  if (!po) {
+    const dbPo = await prisma.purchaseOrder.findFirst({
+      where: {
+        OR: [
+          { id: poId },
+          { poNumber: poId },
+          { poNumber: { equals: poId, mode: "insensitive" } }
+        ]
+      }
+    });
+    if (dbPo) {
+      po = dbPo;
+    }
+  }
+
   if (!po) {
     return { error: "Purchase Order not found" };
   }
@@ -2478,7 +2497,7 @@ export async function approvePurchaseOrderAction(poId: string) {
 
   // Update PO to Approved in ERP (auto-verifies if not yet verified)
   await erpDb.purchaseOrders.update({
-    where: { id: poId },
+    where: { id: po.id },
     data: {
       approvalStatus: "Approved",
       poStatus: "Cleared",
@@ -2486,13 +2505,14 @@ export async function approvePurchaseOrderAction(poId: string) {
       erpVerificationStatus: "Verified",
       approvedBy: approverName,
       approvedDate: now,
+      approvedAt: now,
       verifiedBy: po.verifiedBy || approverName,
       verifiedDate: po.verifiedDate || now,
       updatedAt: now
     }
   });
 
-  // Also update approval & verification fields in postgres table directly
+  // Also update approval & verification fields in postgres table directly (safe SQL without missing columns)
   try {
     await prisma.$executeRawUnsafe(`
       UPDATE public.purchase_orders
@@ -2505,10 +2525,9 @@ export async function approvePurchaseOrderAction(poId: string) {
           approved_at = NOW(),
           verified_by = COALESCE(verified_by, $1),
           verified_date = COALESCE(verified_date, NOW()),
-          verified_at = COALESCE(verified_at, NOW()),
           updated_at = NOW()
-      WHERE id = $2 OR po_number = $2;
-    `, approverName, poId);
+      WHERE id = $2 OR po_number = $3;
+    `, approverName, po.id, po.poNumber);
   } catch (err: any) {
     console.error("Direct public.purchase_orders update error during approve:", err.message);
   }
@@ -2522,12 +2541,12 @@ export async function approvePurchaseOrderAction(poId: string) {
           po_status = 'Cleared',
           updated_at = NOW()
       WHERE po_number = $1 OR erp_reference_id = $2
-    `, po.poNumber, poId);
+    `, po.poNumber, po.id);
   } catch (err: any) {
     console.error("Direct CRM DB update error during approve:", err.message);
   }
 
-  await syncErpPoToCrm(poId);
+  await syncErpPoToCrm(po.id);
 
   auditLog("PO_APPROVAL", performedBy, po.customerId, {
     poNumber: po.poNumber,
